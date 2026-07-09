@@ -6,3 +6,7 @@ xgboost
 scikit-learn
 shap
 pandas
+asyncpg
+google-generativeai
+python-dotenv
+pydantic-settings

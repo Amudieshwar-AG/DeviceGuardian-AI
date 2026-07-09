@@ -10,6 +10,7 @@ import '../../services/device_service.dart';
 import '../../services/telemetry_service.dart';
 import '../../models/device.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../ai_smart_search_widget.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -79,21 +80,11 @@ class HomeScreen extends ConsumerWidget {
                   
                   const SizedBox(height: 32),
                   
-                  // Search Bar
-                  Container(
-                    decoration: BoxDecoration(
-                      color: AppTheme.cardColor,
-                      borderRadius: BorderRadius.circular(AppTheme.borderRadius),
-                    ),
-                    child: TextField(
-                      decoration: InputDecoration(
-                        hintText: 'Search devices or issues...',
-                        hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
-                        prefixIcon: Icon(PhosphorIcons.magnifyingGlass(), color: AppTheme.textSecondary),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                      ),
-                    ),
+                  // AI Smart Search Bar
+                  AISmartSearchWidget(
+                    backendUrl: identical(0, 0.0) // Quick check for web
+                        ? "http://127.0.0.1:8000/api/search"
+                        : "http://10.0.2.2:8000/api/search",
                   ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
                   
                   const SizedBox(height: 32),

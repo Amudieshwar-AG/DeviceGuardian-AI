@@ -6,10 +6,14 @@ from datetime import datetime
 import models
 from database import engine, SessionLocal
 from ai_pipeline import run_ai_pipeline
+from api.routes import search
 
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="DeviceGuardian AI Backend")
+
+# Include AI Smart Search Route
+app.include_router(search.router, prefix="/api")
 
 # Enable CORS for Flutter web / mobile access
 app.add_middleware(
