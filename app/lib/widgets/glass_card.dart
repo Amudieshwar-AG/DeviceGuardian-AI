@@ -22,15 +22,17 @@ class GlassCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
     Widget card = Container(
       width: width,
       height: height,
       margin: margin,
       decoration: BoxDecoration(
-        color: AppTheme.cardColor.withOpacity(0.6),
+        color: Theme.of(context).cardTheme.color?.withOpacity(isDark ? 0.6 : 0.7) ?? Theme.of(context).cardColor.withOpacity(isDark ? 0.6 : 0.7),
         borderRadius: BorderRadius.circular(AppTheme.borderRadius),
         border: Border.all(
-          color: Colors.white.withOpacity(0.08),
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.05),
           width: 1,
         ),
       ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
@@ -14,6 +16,128 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   bool _rememberMe = false;
+  bool _isLogin = true;
+  bool _isLoading = false;
+
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _usernameController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSavedCredentials();
+  }
+
+  Future<void> _loadSavedCredentials() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('saved_email');
+    if (savedEmail != null && savedEmail.isNotEmpty) {
+      setState(() {
+        _emailController.text = savedEmail;
+        _rememberMe = true;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _usernameController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _authenticate() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      if (_isLogin) {
+        String loginIdentifier = _emailController.text.trim();
+        String actualEmail = loginIdentifier;
+        final prefs = await SharedPreferences.getInstance();
+        
+        if (!loginIdentifier.contains('@')) {
+          final mappedEmail = prefs.getString('username_map_$loginIdentifier');
+          if (mappedEmail != null) {
+            actualEmail = mappedEmail;
+          } else {
+            throw Exception("Username not found on this device. Please log in with your Email.");
+          }
+        }
+        
+        await Supabase.instance.client.auth.signInWithPassword(
+          email: actualEmail,
+          password: _passwordController.text,
+        );
+        
+        if (_rememberMe) {
+          await prefs.setString('saved_email', loginIdentifier);
+        } else {
+          await prefs.remove('saved_email');
+        }
+        
+        if (mounted) {
+          context.go('/home');
+        }
+      } else {
+        if (_passwordController.text != _confirmPasswordController.text) {
+          throw Exception("Passwords do not match");
+        }
+        String emailToUse = _emailController.text.trim();
+        String usernameToUse = _usernameController.text.trim();
+        
+        await Supabase.instance.client.auth.signUp(
+          email: emailToUse,
+          password: _passwordController.text,
+          data: {'username': usernameToUse},
+        );
+        
+        // Save mapping locally so they can log in with username later on this device
+        final prefs = await SharedPreferences.getInstance();
+        if (usernameToUse.isNotEmpty) {
+          await prefs.setString('username_map_$usernameToUse', emailToUse);
+        }
+        
+        // Supabase auto-logs in on sign up if email confirmation is off.
+        // We log them out immediately to force manual login.
+        await Supabase.instance.client.auth.signOut();
+        
+        if (mounted) {
+          setState(() {
+            _isLogin = true;
+            _passwordController.clear();
+            _confirmPasswordController.clear();
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Registration successful! Please sign in."),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceAll("Exception: ", "")),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,14 +182,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 24),
                   
                   Text(
-                    'Welcome Back',
+                    _isLogin ? 'Welcome Back' : 'Create Account',
                     style: Theme.of(context).textTheme.displaySmall,
                   ).animate().slideX(begin: -0.2, end: 0, delay: 100.ms).fadeIn(),
                   
                   const SizedBox(height: 8),
                   
                   Text(
-                    'Sign in to monitor your devices.',
+                    _isLogin ? 'Sign in to monitor your devices.' : 'Sign up to get started.',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: AppTheme.textSecondary,
                     ),
@@ -77,50 +201,58 @@ class _LoginScreenState extends State<LoginScreen> {
                     padding: const EdgeInsets.all(24),
                     child: Column(
                       children: [
+                        if (!_isLogin) ...[
+                          _buildTextField(
+                            hint: 'Username',
+                            icon: PhosphorIcons.user(),
+                            controller: _usernameController,
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         _buildTextField(
-                          hint: 'Email',
+                          hint: _isLogin ? 'Email or Username' : 'Email',
                           icon: PhosphorIcons.envelopeSimple(),
+                          controller: _emailController,
                         ),
                         const SizedBox(height: 16),
                         _buildTextField(
                           hint: 'Password',
                           icon: PhosphorIcons.lockKey(),
                           isPassword: true,
+                          controller: _passwordController,
                         ),
+                        if (!_isLogin) ...[
+                          const SizedBox(height: 16),
+                          _buildTextField(
+                            hint: 'Rewrite Password',
+                            icon: PhosphorIcons.lockKey(),
+                            isPassword: true,
+                            controller: _confirmPasswordController,
+                          ),
+                        ],
                         
-                        const SizedBox(height: 16),
-                        
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Checkbox(
-                                  value: _rememberMe,
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _rememberMe = val ?? false;
-                                    });
-                                  },
-                                  activeColor: AppTheme.primaryColor,
-                                  checkColor: AppTheme.backgroundColor,
-                                ),
-                                Text('Remember me', style: Theme.of(context).textTheme.bodySmall),
-                              ],
-                            ),
-                            TextButton(
-                              onPressed: () {},
-                              child: Text(
-                                'Forgot Password?',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.primaryColor,
-                                ),
+                        if (_isLogin) ...[
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Checkbox(
+                                value: _rememberMe,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _rememberMe = val ?? false;
+                                  });
+                                },
+                                activeColor: AppTheme.primaryColor,
+                                checkColor: AppTheme.backgroundColor,
                               ),
-                            )
-                          ],
-                        ),
+                              Text('Remember me', style: Theme.of(context).textTheme.bodySmall),
+                            ],
+                          ),
+                        ] else
+                          const SizedBox(height: 24),
                         
-                        const SizedBox(height: 24),
+                        if (_isLogin)
+                          const SizedBox(height: 24),
                         
                         // Gradient Button
                         Container(
@@ -134,14 +266,18 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ),
                           child: ElevatedButton(
-                            onPressed: () {
-                              context.go('/home');
-                            },
+                            onPressed: _isLoading ? null : _authenticate,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               shadowColor: Colors.transparent,
                             ),
-                            child: const Text('Sign In'),
+                            child: _isLoading 
+                                ? const SizedBox(
+                                    height: 20, 
+                                    width: 20, 
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : Text(_isLogin ? 'Sign In' : 'Sign Up'),
                           ),
                         ),
                       ],
@@ -151,28 +287,22 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 32),
                   
                   Center(
-                    child: Text('OR', style: Theme.of(context).textTheme.bodySmall),
-                  ).animate().fadeIn(delay: 500.ms),
-                  
-                  const SizedBox(height: 32),
-                  
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
+                    child: TextButton(
                       onPressed: () {
-                        context.go('/home');
+                        setState(() {
+                          _isLogin = !_isLogin;
+                        });
                       },
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: BorderSide(color: Colors.white.withOpacity(0.1)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(AppTheme.borderRadius),
+                      child: Text(
+                        _isLogin
+                            ? "Don't have an account? Create one"
+                            : "Already have an account? Sign In",
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.primaryColor,
                         ),
                       ),
-                      icon: Icon(PhosphorIcons.googleLogo(), color: Colors.white),
-                      label: const Text('Continue with Google', style: TextStyle(color: Colors.white)),
                     ),
-                  ).animate().slideY(begin: 0.2, end: 0, delay: 600.ms).fadeIn(),
+                  ).animate().fadeIn(delay: 500.ms),
                 ],
               ),
             ),
@@ -182,8 +312,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField({required String hint, required IconData icon, bool isPassword = false}) {
+  Widget _buildTextField({required String hint, required IconData icon, bool isPassword = false, TextEditingController? controller}) {
     return TextField(
+      controller: controller,
       obscureText: isPassword,
       style: const TextStyle(color: Colors.white),
       decoration: InputDecoration(

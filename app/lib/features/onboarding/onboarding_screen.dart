@@ -90,9 +90,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       context.go('/login');
                     }
                   },
-                  child: Text(_currentPage == _pages.length - 1 ? 'Get Started' : 'Next'),
-                ).animate(target: _currentPage == _pages.length - 1 ? 1 : 0)
-                 .tint(color: AppTheme.primaryColor),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: AppTheme.backgroundColor,
+                  ),
+                  child: Text(
+                    _currentPage == _pages.length - 1 ? 'Get Started' : 'Next',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
               ],
             ),
           ),

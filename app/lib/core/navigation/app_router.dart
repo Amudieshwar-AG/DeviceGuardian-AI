@@ -58,7 +58,11 @@ class AppRouter {
       ),
       GoRoute(
         path: '/dashboard',
-        builder: (context, state) => const DashboardScreen(),
+        builder: (context, state) {
+          // If a device is passed in extra, use it, otherwise pass null or a dummy
+          final device = state.extra; 
+          return DashboardScreen(device: device);
+        },
       ),
       GoRoute(
         path: '/insights',

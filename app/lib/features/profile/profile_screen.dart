@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = Supabase.instance.client.auth.currentUser;
+    final email = user?.email ?? 'Unknown Email';
+    final username = user?.userMetadata?['username'] as String? ?? 'User';
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Profile & Settings'),
@@ -30,19 +37,16 @@ class ProfileScreen extends StatelessWidget {
                     height: 100,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: AppTheme.cardColor,
+                      color: Theme.of(context).cardColor,
                       border: Border.all(color: AppTheme.primaryColor, width: 2),
-                      image: const DecorationImage(
-                        image: NetworkImage('https://i.pravatar.cc/300?img=11'),
-                        fit: BoxFit.cover,
-                      ),
                     ),
+                    child: Icon(PhosphorIcons.user(), size: 48, color: AppTheme.primaryColor),
                   ).animate().scale(duration: 500.ms, curve: Curves.easeOutBack),
                   const SizedBox(height: 16),
-                  Text('Alex Morgan', style: Theme.of(context).textTheme.headlineMedium)
+                  Text(username, style: Theme.of(context).textTheme.headlineMedium)
                       .animate().fadeIn(delay: 100.ms),
                   const SizedBox(height: 4),
-                  Text('Pro Subscription', style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  Text(email, style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: AppTheme.primaryColor,
                   )).animate().fadeIn(delay: 200.ms),
                 ],
@@ -59,8 +63,10 @@ class ProfileScreen extends StatelessWidget {
             const SizedBox(height: 24),
             
             _buildSection(context, 'Preferences', [
-              _buildSwitchTile(context, 'Dark Mode', PhosphorIcons.moon(), true),
-              _buildSwitchTile(context, 'Notifications', PhosphorIcons.bell(), true),
+              _buildSwitchTile(context, 'Dark Mode', PhosphorIcons.moon(), isDark, (val) {
+                ref.read(themeModeProvider.notifier).toggle(val);
+              }),
+              _buildSwitchTile(context, 'Notifications', PhosphorIcons.bell(), true, (val) {}),
               _buildListTile(context, 'Language', PhosphorIcons.translate(), 'English', () {}),
             ], 400),
             
@@ -128,13 +134,13 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSwitchTile(BuildContext context, String title, IconData icon, bool value) {
+  Widget _buildSwitchTile(BuildContext context, String title, IconData icon, bool value, ValueChanged<bool> onChanged) {
     return ListTile(
       leading: Icon(icon, color: AppTheme.textSecondary),
       title: Text(title, style: Theme.of(context).textTheme.bodyLarge),
       trailing: Switch(
         value: value,
-        onChanged: (val) {},
+        onChanged: onChanged,
         activeColor: AppTheme.primaryColor,
         activeTrackColor: AppTheme.primaryColor.withOpacity(0.3),
       ),

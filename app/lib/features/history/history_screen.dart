@@ -42,10 +42,12 @@ class HistoryScreen extends StatelessWidget {
                 .animate().fadeIn(delay: 200.ms),
             const SizedBox(height: 24),
             
-            _buildTimelineItem(context, 'Today, 10:00 AM', 'Minor thermal throttling detected.', AppTheme.warning, true, 300),
-            _buildTimelineItem(context, 'Yesterday', 'Health score improved after fan cleaning.', AppTheme.success, false, 400),
-            _buildTimelineItem(context, 'Oct 12', 'Predicted SSD wear reaching 15% threshold.', AppTheme.primaryColor, false, 500),
-            _buildTimelineItem(context, 'Oct 10', 'Device registered successfully.', AppTheme.textSecondary, false, 600),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.only(top: 20.0),
+                child: Text("No history available."),
+              ),
+            ),
           ],
         ),
       ),

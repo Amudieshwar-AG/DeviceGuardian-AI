@@ -7,7 +7,9 @@ import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/health_gauge.dart';
 import '../../services/device_service.dart';
+import '../../services/telemetry_service.dart';
 import '../../models/device.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -29,6 +31,9 @@ class HomeScreen extends ConsumerWidget {
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
+            // 1. Push latest battery data to backend first
+            await ref.read(telemetryServiceProvider).syncNow();
+            // 2. Then refresh device list from backend
             ref.invalidate(myDevicesProvider);
           },
           child: SingleChildScrollView(
@@ -53,7 +58,7 @@ class HomeScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'Alex',
+                            Supabase.instance.client.auth.currentUser?.userMetadata?['username'] ?? 'User',
                             style: Theme.of(context).textTheme.headlineMedium,
                           ),
                         ],
@@ -95,8 +100,17 @@ class HomeScreen extends ConsumerWidget {
                   
                   // Overall Health Score
                   Center(
-                    child: const HealthGauge(score: 88, size: 240)
-                        .animate().scale(delay: 300.ms, duration: 600.ms, curve: Curves.easeOutBack),
+                    child: devicesAsync.when(
+                      data: (devices) {
+                        if (devices.isEmpty) return const HealthGauge(score: 0, size: 240);
+                        // Calculate average health score of all devices
+                        int avgScore = (devices.map((d) => d.healthScore).reduce((a, b) => a + b) / devices.length).round();
+                        return HealthGauge(score: avgScore, size: 240)
+                            .animate().scale(delay: 300.ms, duration: 600.ms, curve: Curves.easeOutBack);
+                      },
+                      loading: () => const CircularProgressIndicator(),
+                      error: (_, __) => const HealthGauge(score: 0, size: 240),
+                    ),
                   ),
                   
                   const SizedBox(height: 32),
@@ -139,15 +153,20 @@ class HomeScreen extends ConsumerWidget {
                   SizedBox(
                     height: 180,
                     child: devicesAsync.when(
-                      data: (devices) => ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: devices.length,
-                        itemBuilder: (context, index) {
-                          return _buildDeviceCard(context, devices[index])
-                              .animate().fadeIn(delay: Duration(milliseconds: 600 + (index * 100)))
-                              .slideX(begin: 0.1, end: 0);
-                        },
-                      ),
+                      data: (devices) {
+                        if (devices.isEmpty) {
+                          return const Center(child: Text("No devices found. Add a device to begin tracking."));
+                        }
+                        return ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: devices.length,
+                          itemBuilder: (context, index) {
+                            return _buildDeviceCard(context, devices[index])
+                                .animate().fadeIn(delay: Duration(milliseconds: 600 + (index * 100)))
+                                .slideX(begin: 0.1, end: 0);
+                          },
+                        );
+                      },
                       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
                       error: (err, stack) => Center(child: Text('Error: $err')),
                     ),
@@ -191,7 +210,7 @@ class HomeScreen extends ConsumerWidget {
       margin: const EdgeInsets.only(right: 16),
       child: GlassCard(
         onTap: () {
-          context.push('/dashboard');
+          context.push('/dashboard', extra: device);
         },
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -228,13 +247,16 @@ class HomeScreen extends ConsumerWidget {
             const SizedBox(height: 8),
             Row(
               children: [
-                Icon(PhosphorIcons.batteryFull(), size: 16, color: AppTheme.textSecondary),
+                Icon(device.isCharging ? PhosphorIcons.lightning() : PhosphorIcons.batteryFull(), size: 16, color: device.isCharging ? AppTheme.success : AppTheme.textSecondary),
                 const SizedBox(width: 4),
-                Text('${device.batteryLevel}%', style: Theme.of(context).textTheme.bodySmall),
-                const SizedBox(width: 16),
-                Icon(PhosphorIcons.thermometer(), size: 16, color: AppTheme.textSecondary),
-                const SizedBox(width: 4),
-                Text('${device.temperature}°C', style: Theme.of(context).textTheme.bodySmall),
+                Text(device.isCharging ? 'Charging • ${device.batteryLevel}%' : '${device.batteryLevel}%', style: Theme.of(context).textTheme.bodySmall),
+                
+                if (device.temperature > 0) ...[
+                  const SizedBox(width: 16),
+                  Icon(PhosphorIcons.thermometer(), size: 16, color: AppTheme.textSecondary),
+                  const SizedBox(width: 4),
+                  Text('${device.temperature.toStringAsFixed(1)}°C', style: Theme.of(context).textTheme.bodySmall),
+                ],
               ],
             )
           ],

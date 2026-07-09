@@ -21,53 +21,12 @@ class NotificationsScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(24.0),
         children: [
-          _buildNotificationGroup(
-            context,
-            'Today',
-            [
-              _buildNotificationItem(
-                context,
-                'Battery health dropped 5%',
-                'Your Lenovo IdeaPad Slim 5 battery health has degraded. Review recommendations.',
-                AppTheme.warning,
-                PhosphorIcons.batteryWarning(),
-                true,
-              ),
-              _buildNotificationItem(
-                context,
-                'SSD errors increasing',
-                'Minor read errors detected. Please backup your data.',
-                AppTheme.critical,
-                PhosphorIcons.hardDrive(),
-                true,
-              ),
-            ],
-            100,
-          ),
-          const SizedBox(height: 32),
-          _buildNotificationGroup(
-            context,
-            'Yesterday',
-            [
-              _buildNotificationItem(
-                context,
-                'Device overheating',
-                'Sustained high temperatures detected during gaming session.',
-                AppTheme.warning,
-                PhosphorIcons.thermometer(),
-                false,
-              ),
-              _buildNotificationItem(
-                context,
-                'Weekly scan complete',
-                'No new issues found on Samsung Galaxy S24.',
-                AppTheme.success,
-                PhosphorIcons.checkCircle(),
-                false,
-              ),
-            ],
-            300,
-          ),
+          const Center(
+            child: Padding(
+              padding: EdgeInsets.only(top: 40.0),
+              child: Text("No notifications at this time."),
+            ),
+          )
         ],
       ),
     );

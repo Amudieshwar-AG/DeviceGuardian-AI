@@ -30,18 +30,25 @@ class MyDevicesScreen extends ConsumerWidget {
         ],
       ),
       body: devicesAsync.when(
-        data: (devices) => ListView.builder(
-          padding: const EdgeInsets.all(24),
-          itemCount: devices.length,
-          itemBuilder: (context, index) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: _buildListDeviceCard(context, devices[index])
-                  .animate().fadeIn(delay: Duration(milliseconds: index * 100))
-                  .slideY(begin: 0.1, end: 0),
+        data: (devices) {
+          if (devices.isEmpty) {
+            return const Center(
+              child: Text('No devices found. Add a device to get started!'),
             );
-          },
-        ),
+          }
+          return ListView.builder(
+            padding: const EdgeInsets.all(24),
+            itemCount: devices.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: _buildListDeviceCard(context, devices[index])
+                    .animate().fadeIn(delay: Duration(milliseconds: index * 100))
+                    .slideY(begin: 0.1, end: 0),
+              );
+            },
+          );
+        },
         loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor)),
         error: (err, stack) => Center(child: Text('Error: $err')),
       ),
