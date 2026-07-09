@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 
@@ -75,6 +76,32 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordController.text,
         );
         
+        // Ensure the phone has a unique device UUID
+        String? myUuid = prefs.getString('official_device_uuid');
+        if (myUuid == null) {
+          myUuid = const Uuid().v4();
+          await prefs.setString('official_device_uuid', myUuid);
+        }
+
+        // Register this device mapping in Supabase if not already mapped
+        try {
+          final mapping = await Supabase.instance.client
+              .from('device_mappings')
+              .select('id')
+              .eq('username', actualEmail)
+              .eq('device_uuid', myUuid)
+              .maybeSingle();
+              
+          if (mapping == null) {
+            await Supabase.instance.client.from('device_mappings').insert({
+              'username': actualEmail,
+              'device_uuid': myUuid,
+            });
+          }
+        } catch (e) {
+          debugPrint('Error handling device mapping: $e');
+        }
+        
         if (_rememberMe) {
           await prefs.setString('saved_email', loginIdentifier);
         } else {
@@ -97,11 +124,23 @@ class _LoginScreenState extends State<LoginScreen> {
           data: {'username': usernameToUse},
         );
         
+        // Register the device mapping
+        final newDeviceUuid = const Uuid().v4();
+        try {
+          await Supabase.instance.client.from('device_mappings').insert({
+            'username': emailToUse,
+            'device_uuid': newDeviceUuid,
+          });
+        } catch (e) {
+          debugPrint('Error inserting device mapping: $e');
+        }
+        
         // Save mapping locally so they can log in with username later on this device
         final prefs = await SharedPreferences.getInstance();
         if (usernameToUse.isNotEmpty) {
           await prefs.setString('username_map_$usernameToUse', emailToUse);
         }
+        await prefs.setString('official_device_uuid', newDeviceUuid);
         
         // Supabase auto-logs in on sign up if email confirmation is off.
         // We log them out immediately to force manual login.

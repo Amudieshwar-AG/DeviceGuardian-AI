@@ -1,7 +1,7 @@
 class ApiConstants {
   // Base URL for the FastAPI backend.
-  // Change this to the deployed URL or network IP if testing on an actual device.
-  static const String baseUrl = 'http://10.230.111.57:8000';
+  // Using 127.0.0.1 because we have set up an ADB reverse proxy over USB.
+  static const String baseUrl = 'http://127.0.0.1:8000';
 
   // Endpoints
   static const String login = '$baseUrl/login';

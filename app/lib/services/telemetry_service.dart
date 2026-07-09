@@ -4,6 +4,7 @@ import 'package:battery_plus/battery_plus.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/services/api_service.dart';
 
 import 'package:flutter/services.dart';
@@ -87,7 +88,10 @@ class TelemetryService {
     // Get device info once
     try {
       final androidInfo = await _deviceInfo.androidInfo;
-      _deviceId = androidInfo.id;
+      
+      final prefs = await SharedPreferences.getInstance();
+      _deviceId = prefs.getString('official_device_uuid') ?? androidInfo.id;
+      
       _deviceName = '${androidInfo.brand} ${androidInfo.model}'.trim();
 
       // Send immediately on start to sync latest data
