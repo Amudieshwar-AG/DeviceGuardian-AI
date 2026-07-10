@@ -110,7 +110,7 @@ def get_devices(db: Session = Depends(get_db)):
         # Get all telemetry history (oldest first for cycle estimation)
         all_telemetry = db.query(models.TelemetryRecord)\
             .filter(models.TelemetryRecord.deviceId == d.id)\
-            .order_by(models.TelemetryRecord.timestamp.asc())\
+            .order_by(models.TelemetryRecord.id.asc())\
             .all()
         
         # Latest reading is the last element
@@ -199,16 +199,16 @@ def sync_device_from_supabase(device_id: str, db: Session):
 
 @app.get("/devices/{device_id}")
 def get_device(device_id: str, db: Session = Depends(get_db)):
+    # Always attempt to sync latest telemetry from Supabase
+    sync_device_from_supabase(device_id, db)
+    
     device = db.query(models.DeviceRecord).filter(models.DeviceRecord.id == device_id).first()
     if not device:
-        # Try fetching from Supabase
-        if not sync_device_from_supabase(device_id, db):
-            raise HTTPException(status_code=404, detail="Device not found")
-        device = db.query(models.DeviceRecord).filter(models.DeviceRecord.id == device_id).first()
+        raise HTTPException(status_code=404, detail="Device not found")
         
     latest_telemetry = db.query(models.TelemetryRecord)\
         .filter(models.TelemetryRecord.deviceId == device_id)\
-        .order_by(models.TelemetryRecord.timestamp.desc())\
+        .order_by(models.TelemetryRecord.id.desc())\
         .first()
         
     battery = latest_telemetry.battery if latest_telemetry else 100
@@ -217,6 +217,28 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
     cpu = latest_telemetry.cpu if latest_telemetry else 0
     ram = latest_telemetry.ram if latest_telemetry else 0
     
+    # Run the AI pipeline to get the real-time health score
+    health = 100
+    if latest_telemetry:
+        all_telemetry = db.query(models.TelemetryRecord)\
+            .filter(models.TelemetryRecord.deviceId == device_id)\
+            .order_by(models.TelemetryRecord.id.asc())\
+            .all()
+            
+        telemetry_dict = {
+            "deviceId": device_id,
+            "cpu": cpu,
+            "ram": ram,
+            "battery": battery,
+            "temperature": temp,
+            "ssd": ssd
+        }
+        try:
+            prediction = run_ai_pipeline(telemetry_dict, all_telemetry)
+            health = prediction["healthScore"]
+        except Exception as e:
+            print(f"Error running pipeline in detail API: {e}")
+            
     return {
         "id": device.id,
         "name": device.name,
@@ -227,24 +249,20 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
         "temperature": temp,
         "ssd": ssd,
         "cpu": cpu,
-        "ram": ram
+        "ram": ram,
+        "healthScore": health
     }
 
 @app.get("/predictions/{device_id}", response_model=models.PredictionResponse)
 def get_prediction(device_id: str, db: Session = Depends(get_db)):
+    # Always attempt to sync latest telemetry from Supabase first
+    sync_device_from_supabase(device_id, db)
+    
     latest_telemetry = db.query(models.TelemetryRecord)\
         .filter(models.TelemetryRecord.deviceId == device_id)\
-        .order_by(models.TelemetryRecord.timestamp.desc())\
+        .order_by(models.TelemetryRecord.id.desc())\
         .first()
         
-    if not latest_telemetry:
-        # Try fetching from Supabase
-        sync_device_from_supabase(device_id, db)
-        latest_telemetry = db.query(models.TelemetryRecord)\
-            .filter(models.TelemetryRecord.deviceId == device_id)\
-            .order_by(models.TelemetryRecord.timestamp.desc())\
-            .first()
-            
     if not latest_telemetry:
         # Return a default safe prediction if no telemetry exists yet
         return {
@@ -267,7 +285,7 @@ def get_prediction(device_id: str, db: Session = Depends(get_db)):
     # 2. Get full telemetry history for cycle estimation
     all_telemetry = db.query(models.TelemetryRecord)\
         .filter(models.TelemetryRecord.deviceId == device_id)\
-        .order_by(models.TelemetryRecord.timestamp.asc())\
+        .order_by(models.TelemetryRecord.id.asc())\
         .all()
     
     # 3. Run the AI pipeline with history
