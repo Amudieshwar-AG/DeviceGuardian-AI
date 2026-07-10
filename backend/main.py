@@ -119,8 +119,16 @@ def get_devices(db: Session = Depends(get_db)):
         battery = latest_telemetry.battery if latest_telemetry else 100
         temp = latest_telemetry.temperature if latest_telemetry else 35
         
-        # Run AI pipeline with full telemetry history for proper cycle estimation
-        if latest_telemetry:
+        # Fetch the latest prediction from DB (calculated by predictions API)
+        latest_pred = db.query(models.AIPrediction)\
+            .filter(models.AIPrediction.deviceId == d.id)\
+            .order_by(models.AIPrediction.id.desc())\
+            .first()
+            
+        health = 100
+        if latest_pred:
+            health = latest_pred.healthScore
+        elif latest_telemetry:
             telemetry_dict = {
                 "deviceId": latest_telemetry.deviceId,
                 "cpu": latest_telemetry.cpu,
@@ -129,10 +137,11 @@ def get_devices(db: Session = Depends(get_db)):
                 "temperature": latest_telemetry.temperature,
                 "ssd": latest_telemetry.ssd
             }
-            prediction = run_ai_pipeline(telemetry_dict, all_telemetry)
-            health = prediction["healthScore"]
-        else:
-            health = 100
+            try:
+                prediction = run_ai_pipeline(telemetry_dict, all_telemetry)
+                health = prediction["healthScore"]
+            except Exception as e:
+                print(f"Error running pipeline in list API: {e}")
             
         result.append({
             "id": d.id,
@@ -217,9 +226,16 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
     cpu = latest_telemetry.cpu if latest_telemetry else 0
     ram = latest_telemetry.ram if latest_telemetry else 0
     
-    # Run the AI pipeline to get the real-time health score
+    # Fetch the latest prediction from DB (calculated by predictions API)
+    latest_pred = db.query(models.AIPrediction)\
+        .filter(models.AIPrediction.deviceId == device_id)\
+        .order_by(models.AIPrediction.id.desc())\
+        .first()
+        
     health = 100
-    if latest_telemetry:
+    if latest_pred:
+        health = latest_pred.healthScore
+    elif latest_telemetry:
         all_telemetry = db.query(models.TelemetryRecord)\
             .filter(models.TelemetryRecord.deviceId == device_id)\
             .order_by(models.TelemetryRecord.id.asc())\
