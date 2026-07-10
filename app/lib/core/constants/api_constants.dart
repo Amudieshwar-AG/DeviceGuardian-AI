@@ -1,13 +1,18 @@
 class ApiConstants {
-  // Base URL for the FastAPI backend.
-  // Using 127.0.0.1 because we have set up an ADB reverse proxy over USB.
-  static const String baseUrl = 'http://127.0.0.1:8000';
+  // Toggle this to false when compiling the release build (.apk) for the jury
+  static const bool isDevelopment = true;
+
+  // Base URLs
+  static const String devUrl = 'http://127.0.0.1:8000';
+  static const String prodUrl = 'https://your-hosted-backend.com'; // Change this to your hosted FastAPI URL
+
+  static String get baseUrl => isDevelopment ? devUrl : prodUrl;
 
   // Endpoints
-  static const String login = '$baseUrl/login';
-  static const String devices = '$baseUrl/devices';
-  static const String device = '$baseUrl/devices'; // Notice plural for REST standard
-  static const String prediction = '$baseUrl/predictions';
-  static const String recommendations = '$baseUrl/recommendations';
-  static const String history = '$baseUrl/history';
+  static String get login => '$baseUrl/login';
+  static String get devices => '$baseUrl/devices';
+  static String get device => '$baseUrl/devices'; 
+  static String get prediction => '$baseUrl/predictions';
+  static String get recommendations => '$baseUrl/recommendations';
+  static String get history => '$baseUrl/history';
 }

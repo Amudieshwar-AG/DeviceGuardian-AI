@@ -77,7 +77,26 @@ class DeviceService {
         devices.add(Device.fromJson(fakeJson));
       }
 
-      return devices;
+      // Group devices by name and keep only the latest synced one to prevent duplicates
+      final Map<String, Device> uniqueDevices = {};
+      for (var device in devices) {
+        final existing = uniqueDevices[device.name];
+        if (existing == null) {
+          uniqueDevices[device.name] = device;
+        } else {
+          try {
+            final DateTime existingTime = DateTime.parse(existing.lastSynced);
+            final DateTime newTime = DateTime.parse(device.lastSynced);
+            if (newTime.isAfter(existingTime)) {
+              uniqueDevices[device.name] = device;
+            }
+          } catch (e) {
+            // Fallback: keep the existing one
+          }
+        }
+      }
+
+      return uniqueDevices.values.toList();
     } catch (e) {
       print("Error fetching devices from Supabase: $e");
       return [];

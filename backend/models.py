@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, Float, DateTime
 from database import Base
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 # SQLAlchemy Models (Database)
 class DeviceRecord(Base):
@@ -26,6 +26,18 @@ class TelemetryRecord(Base):
     ssd = Column(Float)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+class AIPrediction(Base):
+    __tablename__ = "ai_predictions"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    deviceId = Column(String, index=True)
+    healthScore = Column(Integer)
+    riskLevel = Column(String)
+    isAnomaly = Column(Integer)  # 0 or 1
+    anomalyScore = Column(Float)
+    confidenceLevel = Column(Float)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
 # Pydantic Models (API Validation)
 class TelemetryCreate(BaseModel):
     deviceId: str
@@ -46,9 +58,34 @@ class DeviceResponse(BaseModel):
     status: str
     lastUpdated: str
 
+class ActionableRecommendation(BaseModel):
+    title: str
+    description: str
+    improvement: str
+    icon: str
+    color: str
+
 class PredictionResponse(BaseModel):
     deviceId: str
     healthScore: int
     riskLevel: str
-    recommendations: list[str]
+    recommendations: List[ActionableRecommendation]
     shapValues: dict[str, float]
+    isAnomaly: bool
+    anomalyScore: float
+    confidenceLevel: float
+
+class SupportTicketRequest(BaseModel):
+    deviceId: str
+    healthScore: int
+    riskLevel: str
+    cpu: float
+    ram: float
+    battery: float
+    temperature: float
+    ssd: float
+
+class SupportTicketResponse(BaseModel):
+    status: str
+    ticketId: str
+    message: str

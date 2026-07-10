@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -100,23 +102,48 @@ class _WindowsFlowScreenState extends State<WindowsFlowScreen> {
       children: [
         _buildStepIndicator(1),
         const SizedBox(height: 32),
+        Text('Visit link on laptop', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 16),
+        Text(
+          'Open your Windows laptop browser and go to this link to download the monitoring agent.',
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppTheme.textSecondary),
+        ),
+        const SizedBox(height: 32),
         GlassCard(
           padding: const EdgeInsets.all(24),
           child: Column(
             children: [
-              Icon(PhosphorIcons.fileZip(), size: 64, color: AppTheme.primaryColor),
+              Icon(PhosphorIcons.link(), size: 48, color: AppTheme.primaryColor),
               const SizedBox(height: 16),
-              Text('DeviceGuardian_Agent.exe', style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: 8),
-              Text('Size: 4.2 MB', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: AppTheme.textSecondary)),
+              Text('https://lapmonitoring.vercel.app/', 
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center),
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _nextStep,
-                  icon: Icon(PhosphorIcons.downloadSimple(), color: AppTheme.backgroundColor),
-                  label: const Text('Download Agent'),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Clipboard.setData(const ClipboardData(text: 'https://lapmonitoring.vercel.app/'));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Link copied to clipboard')),
+                        );
+                      },
+                      icon: Icon(PhosphorIcons.copy()),
+                      label: const Text('Copy'),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () {
+                        launchUrl(Uri.parse('https://lapmonitoring.vercel.app/'));
+                        _nextStep();
+                      },
+                      child: const Text('Open'),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

@@ -1,0 +1,15 @@
+{
+    "r2_score": 0.9955610895216191,
+    "mae_percent": 0.6221423355197647,
+    "accuracy_within_2_percent": 0.9585,
+    "accuracy_within_3_percent": 0.988,
+    "total_samples": 10000,
+    "validation_samples": 2000,
+    "features_used": [
+        "charge_cycles",
+        "avg_temperature",
+        "avg_cpu_load",
+        "ssd_tbw",
+        "ram_swap_stress"
+    ]
+}

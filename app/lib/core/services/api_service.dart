@@ -91,4 +91,43 @@ class ApiService {
       return true; 
     }
   }
+
+  /// Send diagnostics ticket to customer support
+  Future<Map<String, dynamic>?> sendSupportTicket({
+    required String deviceId,
+    required int healthScore,
+    required String riskLevel,
+    required double cpu,
+    required double ram,
+    required double battery,
+    required double temperature,
+    required double ssd,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiConstants.baseUrl}/api/support/ticket'),
+        headers: _headers,
+        body: json.encode({
+          'deviceId': deviceId,
+          'healthScore': healthScore,
+          'riskLevel': riskLevel,
+          'cpu': cpu,
+          'ram': ram,
+          'battery': battery,
+          'temperature': temperature,
+          'ssd': ssd,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return json.decode(response.body) as Map<String, dynamic>;
+      } else {
+        print('Failed to send support ticket: ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('API Error (sendSupportTicket): $e');
+      return null;
+    }
+  }
 }

@@ -60,7 +60,7 @@ class MyDevicesScreen extends ConsumerWidget {
     
     return GlassCard(
       onTap: () {
-        context.push('/dashboard');
+        context.push('/dashboard', extra: device);
       },
       child: Row(
         children: [

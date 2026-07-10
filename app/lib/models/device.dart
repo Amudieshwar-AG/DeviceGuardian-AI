@@ -1,5 +1,5 @@
 enum DeviceType { laptop, phone, tablet }
-enum DeviceStatus { healthy, warning, critical }
+enum DeviceStatus { healthy, warning, critical, supportContacted }
 
 class Device {
   final String id;
@@ -47,6 +47,7 @@ class Device {
     String statusStr = (json['status'] ?? 'healthy').toString().toLowerCase();
     if (statusStr.contains('warn')) parsedStatus = DeviceStatus.warning;
     if (statusStr.contains('crit')) parsedStatus = DeviceStatus.critical;
+    if (statusStr.contains('contact')) parsedStatus = DeviceStatus.supportContacted;
     
     bool isCharging = statusStr.contains('charg') || (json['isCharging'] == true);
 
