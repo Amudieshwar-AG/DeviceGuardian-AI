@@ -75,19 +75,11 @@ def train_or_load_model():
     global model, explainer, iso_forest
     if model is not None and iso_forest is not None:
         return
-        
-    model = xgb.XGBRegressor(
-        n_estimators=200,
-        max_depth=5,
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        base_score=0.5,
-        random_state=42
-    )
     
     if os.path.exists(MODEL_PATH):
         print(f"Loading trained model from {MODEL_PATH}...")
+        # Use xgb.Booster directly to avoid _estimator_type issues with newer XGBoost
+        model = xgb.Booster()
         model.load_model(MODEL_PATH)
     else:
         dataset_path = "device_health_dataset.csv"
@@ -157,6 +149,7 @@ def train_or_load_model():
         print(f"Saved anomaly model to {ANOMALY_MODEL_PATH}")
     
     print("Building SHAP TreeExplainer...")
+    # shap.TreeExplainer works with both Booster and XGBRegressor
     explainer = shap.TreeExplainer(model)
     print("Model ready.")
 
@@ -214,7 +207,12 @@ def run_ai_pipeline(telemetry_data: dict, telemetry_history: list = None) -> dic
     }])
     
     # 1. Predict Overall System Health Score
-    pred_health = model.predict(input_df)[0]
+    # Support both Booster (loaded from file) and XGBRegressor (freshly trained)
+    if isinstance(model, xgb.Booster):
+        dmatrix = xgb.DMatrix(input_df)
+        pred_health = model.predict(dmatrix)[0]
+    else:
+        pred_health = model.predict(input_df)[0]
     health_score = int(np.clip(pred_health, 0, 100))
     
     # Predict Anomaly using Isolation Forest
