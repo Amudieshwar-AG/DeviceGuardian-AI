@@ -15,9 +15,9 @@ class HealthGauge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     Color gaugeColor;
-    if (score >= 90) {
+    if (score >= 85) {
       gaugeColor = AppTheme.success;
-    } else if (score >= 70) {
+    } else if (score >= 75) {
       gaugeColor = AppTheme.warning;
     } else {
       gaugeColor = AppTheme.critical;

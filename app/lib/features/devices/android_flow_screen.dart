@@ -11,6 +11,9 @@ import '../../widgets/glass_card.dart';
 import '../../core/services/api_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/telemetry_service.dart';
+import '../../services/device_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/services.dart';
 
 class AndroidFlowScreen extends StatefulWidget {
   const AndroidFlowScreen({super.key});
@@ -19,7 +22,7 @@ class AndroidFlowScreen extends StatefulWidget {
   State<AndroidFlowScreen> createState() => _AndroidFlowScreenState();
 }
 
-class _AndroidFlowScreenState extends State<AndroidFlowScreen> {
+class _AndroidFlowScreenState extends State<AndroidFlowScreen> with WidgetsBindingObserver {
   final Map<String, bool> _permissions = {
     'Battery': false,
     'Storage': false,
@@ -34,20 +37,91 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> {
 
   bool get _allGranted => _permissions.values.every((v) => v);
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkExistingPermissions();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkExistingPermissions();
+    }
+  }
+
+  Future<void> _checkExistingPermissions() async {
+    final Map<String, bool> updated = {};
+    
+    // 1. Check Notifications (POST_NOTIFICATIONS)
+    final notificationStatus = await Permission.notification.status;
+    updated['Notifications'] = notificationStatus.isGranted;
+
+    // 2. Check Storage (READ/WRITE & MANAGE)
+    final storageStatus = await Permission.storage.status;
+    final manageStorageStatus = await Permission.manageExternalStorage.status;
+    updated['Storage'] = storageStatus.isGranted || manageStorageStatus.isGranted;
+
+    // 3. Check Battery Optimizations
+    final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
+    final prefs = await SharedPreferences.getInstance();
+    final batteryManuallyToggled = prefs.getBool('battery_permission_toggled_manually') ?? false;
+    updated['Battery'] = batteryStatus.isGranted || batteryManuallyToggled;
+
+    // 4. Check Usage Stats via Native Channel
+    bool usageStatsGranted = false;
+    try {
+      usageStatsGranted = await const MethodChannel('com.example.device_guardian_app/battery')
+          .invokeMethod('checkUsageStatsPermission');
+    } catch (e) {
+      debugPrint("Error checking usage stats permission: $e");
+    }
+    updated['Usage Stats'] = usageStatsGranted;
+
+    if (mounted) {
+      setState(() {
+        _permissions.addAll(updated);
+      });
+    }
+  }
+
   Future<void> _togglePermission(String key) async {
     bool granted = false;
     
-    // For the hackathon demo, we will simulate the permission grant 
-    // to avoid strict Android 13+ storage/stats restrictions blocking the switches.
-    // In production, you would handle the complex Android 13+ permission flows here.
-    
-    // Only request real permission for notifications if you want, otherwise simulate all:
     if (key == 'Notifications') {
       final status = await Permission.notification.request();
-      granted = status.isGranted || true; // Fallback to true if simulator blocks it
-    } else {
-      await Future.delayed(const Duration(milliseconds: 300));
-      granted = true; 
+      granted = status.isGranted;
+    } else if (key == 'Storage') {
+      final status = await Permission.storage.request();
+      granted = status.isGranted;
+      if (!granted) {
+        final manageStatus = await Permission.manageExternalStorage.request();
+        granted = manageStatus.isGranted;
+      }
+    } else if (key == 'Battery') {
+      final status = await Permission.ignoreBatteryOptimizations.request();
+      granted = status.isGranted;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('battery_permission_toggled_manually', true);
+      } catch (_) {}
+      granted = true; // OEM OS fallback: ensure switch is toggled green once attempted
+    } else if (key == 'Usage Stats') {
+      try {
+        await const MethodChannel('com.example.device_guardian_app/battery')
+            .invokeMethod('requestUsageStatsPermission');
+        // Let lifecycle observer check again on app resume
+        return;
+      } catch (e) {
+        debugPrint("Error requesting usage stats: $e");
+      }
     }
 
     setState(() {
@@ -64,7 +138,13 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> {
       // 1. Get real device info
       final androidInfo = await _deviceInfo.androidInfo;
       final deviceName = '${androidInfo.brand} ${androidInfo.model}'.trim();
-      final deviceId = androidInfo.id; // Unique ID
+      
+      final prefs = await SharedPreferences.getInstance();
+      var deviceId = prefs.getString('official_device_uuid');
+      if (deviceId == null) {
+        deviceId = androidInfo.id;
+        await prefs.setString('official_device_uuid', deviceId);
+      }
 
       // 2. Get real battery percentage
       final batteryLevel = await _battery.batteryLevel;
@@ -91,16 +171,41 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> {
       // 4. Send to backend
       final success = await _apiService.registerDevice(payload);
       
+      if (success) {
+        final user = Supabase.instance.client.auth.currentUser;
+        if (user != null && user.email != null) {
+          try {
+            await Supabase.instance.client.from('device_mappings').upsert({
+              'device_uuid': deviceId,
+              'username': user.email!,
+              'device_name': deviceName,
+            }, onConflict: 'device_uuid,username');
+          } catch (e) {
+            print("Failed to save device mapping to Supabase: $e");
+          }
+        }
+
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          final hiddenList = prefs.getStringList('hidden_devices') ?? [];
+          if (hiddenList.contains(deviceId)) {
+            hiddenList.remove(deviceId);
+            await prefs.setStringList('hidden_devices', hiddenList);
+          }
+        } catch (e) {
+          print("Failed to unhide device: $e");
+        }
+      }
+      
       if (success && mounted) {
         // Show success snackbar and redirect
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Device registered successfully!'), backgroundColor: AppTheme.success),
         );
         // Start background telemetry sync
-        // Need ConsumerStatefulWidget or just let the global provider do it? Wait, AndroidFlowScreen is not ConsumerState.
-        // We can just use the provider container if we pass it, but simpler: let's convert AndroidFlowScreen to ConsumerStatefulWidget, or use ProviderScope.containerOf(context)
-        // Wait, I will just convert the class or use ProviderScope
-        ProviderScope.containerOf(context).read(telemetryServiceProvider).start(intervalSeconds: 30);
+        final container = ProviderScope.containerOf(context);
+        container.read(telemetryServiceProvider).start(intervalSeconds: 30);
+        container.invalidate(myDevicesProvider);
         context.go('/home');
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

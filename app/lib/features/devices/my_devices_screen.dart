@@ -88,7 +88,11 @@ class MyDevicesScreen extends ConsumerWidget {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color: device.healthScore >= 90 ? AppTheme.success : AppTheme.warning,
+                        color: device.healthScore >= 85 
+                            ? AppTheme.success 
+                            : (device.healthScore >= 75 
+                                ? AppTheme.warning 
+                                : AppTheme.critical),
                         shape: BoxShape.circle,
                       ),
                     ),

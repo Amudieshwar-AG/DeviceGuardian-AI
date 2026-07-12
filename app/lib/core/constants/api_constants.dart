@@ -4,7 +4,7 @@ class ApiConstants {
 
   // Base URLs
   static const String devUrl = 'http://127.0.0.1:8000';
-  static const String prodUrl = 'https://your-hosted-backend.com'; // Change this to your hosted FastAPI URL
+  static const String prodUrl = 'https://deviceguardian-ai.onrender.com';
 
   static String get baseUrl => isDevelopment ? devUrl : prodUrl;
 

@@ -10,13 +10,18 @@ import '../../services/device_service.dart';
 import '../../services/telemetry_service.dart';
 import '../../models/device.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../ai_smart_search_widget.dart';
+
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Ensure background telemetry is started immediately on home screen load
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(telemetryServiceProvider).start(intervalSeconds: 30);
+    });
+
     final devicesAsync = ref.watch(myDevicesProvider);
 
     return Scaffold(
@@ -80,27 +85,32 @@ class HomeScreen extends ConsumerWidget {
                   
                   const SizedBox(height: 32),
                   
-                  // AI Smart Search Bar
-                  AISmartSearchWidget(
-                    backendUrl: identical(0, 0.0) // Quick check for web
-                        ? "http://127.0.0.1:8000/api/search"
-                        : "http://10.0.2.2:8000/api/search",
-                  ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0),
-                  
-                  const SizedBox(height: 32),
+
                   
                   // Overall Health Score
                   Center(
-                    child: devicesAsync.when(
-                      data: (devices) {
-                        if (devices.isEmpty) return const HealthGauge(score: 0, size: 240);
-                        // Calculate average health score of all devices
-                        int avgScore = (devices.map((d) => d.healthScore).reduce((a, b) => a + b) / devices.length).round();
-                        return HealthGauge(score: avgScore, size: 240)
-                            .animate().scale(delay: 300.ms, duration: 600.ms, curve: Curves.easeOutBack);
-                      },
-                      loading: () => const CircularProgressIndicator(),
-                      error: (_, __) => const HealthGauge(score: 0, size: 240),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Average Fleet Health',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppTheme.textSecondary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ).animate().fadeIn(delay: 250.ms),
+                        const SizedBox(height: 12),
+                        devicesAsync.when(
+                          data: (devices) {
+                            if (devices.isEmpty) return const HealthGauge(score: 0, size: 240);
+                            // Calculate average health score of all devices
+                            int avgScore = (devices.map((d) => d.healthScore).reduce((a, b) => a + b) / devices.length).round();
+                            return HealthGauge(score: avgScore, size: 240)
+                                .animate().scale(delay: 300.ms, duration: 600.ms, curve: Curves.easeOutBack);
+                          },
+                          loading: () => const CircularProgressIndicator(),
+                          error: (_, __) => const HealthGauge(score: 0, size: 240),
+                        ),
+                      ],
                     ),
                   ),
                   
@@ -152,7 +162,7 @@ class HomeScreen extends ConsumerWidget {
                           scrollDirection: Axis.horizontal,
                           itemCount: devices.length,
                           itemBuilder: (context, index) {
-                            return _buildDeviceCard(context, devices[index])
+                            return _buildDeviceCard(context, ref, devices[index])
                                 .animate().fadeIn(delay: Duration(milliseconds: 600 + (index * 100)))
                                 .slideX(begin: 0.1, end: 0);
                           },
@@ -193,15 +203,16 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildDeviceCard(BuildContext context, Device device) {
+  Widget _buildDeviceCard(BuildContext context, WidgetRef ref, Device device) {
     IconData deviceIcon = device.type == DeviceType.laptop ? PhosphorIcons.laptop() : PhosphorIcons.deviceMobile();
     
     return Container(
       width: 280,
       margin: const EdgeInsets.only(right: 16),
       child: GlassCard(
-        onTap: () {
-          context.push('/dashboard', extra: device);
+        onTap: () async {
+          await context.push('/dashboard', extra: device);
+          ref.invalidate(myDevicesProvider);
         },
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -214,17 +225,56 @@ class HomeScreen extends ConsumerWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: device.healthScore >= 90 ? AppTheme.success.withOpacity(0.1) : AppTheme.warning.withOpacity(0.1),
+                    color: device.healthScore >= 85 
+                        ? AppTheme.success.withOpacity(0.1) 
+                        : (device.healthScore >= 75 
+                            ? AppTheme.warning.withOpacity(0.1) 
+                            : AppTheme.critical.withOpacity(0.1)),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     '${device.healthScore}% Health',
                     style: TextStyle(
-                      color: device.healthScore >= 90 ? AppTheme.success : AppTheme.warning,
+                      color: device.healthScore >= 85 
+                          ? AppTheme.success 
+                          : (device.healthScore >= 75 
+                              ? AppTheme.warning 
+                              : AppTheme.critical),
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
                   ),
+                ),
+                const SizedBox(width: 4),
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  icon: Icon(PhosphorIcons.dotsThreeVertical(), color: AppTheme.textSecondary, size: 24),
+                  color: AppTheme.cardColor,
+                  onSelected: (value) async {
+                    if (value == 'remove') {
+                      try {
+                        await ref.read(deviceServiceProvider).removeDevice(device.id);
+                        ref.invalidate(myDevicesProvider);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Device removed successfully'), backgroundColor: AppTheme.success)
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Failed to remove device'), backgroundColor: AppTheme.critical)
+                          );
+                        }
+                      }
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'remove',
+                      child: Text('Remove device', style: TextStyle(color: Colors.redAccent)),
+                    ),
+                  ],
                 ),
               ],
             ),

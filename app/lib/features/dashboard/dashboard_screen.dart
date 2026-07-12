@@ -13,6 +13,9 @@ import '../../widgets/simple_line_chart.dart';
 import '../../models/device.dart';
 import '../../models/prediction.dart';
 import '../../core/services/api_service.dart';
+import '../../services/telemetry_service.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardScreen extends StatefulWidget {
   final dynamic device; // passed from router
@@ -307,6 +310,108 @@ ${_prediction!.recommendations.map((r) => "[${r.title}]\n${r.description} (Est. 
     );
   }
 
+  Future<void> _showCalibrationDialog(BuildContext context) async {
+    final prefs = await SharedPreferences.getInstance();
+    final double currentCalibrated = prefs.getDouble('calibrated_battery_health') ?? 
+        (_prediction?.healthScore ?? _displayDevice.healthScore).toDouble();
+    
+    final controller = TextEditingController(text: currentCalibrated.toInt().toString());
+    
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E2C),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(PhosphorIcons.wrench(PhosphorIconsStyle.fill), color: AppTheme.primaryColor),
+              const SizedBox(width: 8),
+              const Text('Calibrate Battery', style: TextStyle(color: Colors.white, fontSize: 16)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Some manufacturers (like Vivo/iQOO) lock down standard battery capacity APIs.\n\nYou can manually enter your phone\'s actual battery health percentage (from OS settings) to calibrate the AI model.',
+                style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Battery Health (%)',
+                  labelStyle: const TextStyle(color: AppTheme.primaryColor),
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: AppTheme.primaryColor.withOpacity(0.5)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(color: AppTheme.primaryColor),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () async {
+                final double? value = double.tryParse(controller.text);
+                if (value != null && value > 0 && value <= 100) {
+                  final p = await SharedPreferences.getInstance();
+                  await p.setDouble('calibrated_battery_health', value);
+                  
+                  if (context.mounted) {
+                    Navigator.of(context).pop();
+                    
+                    // Trigger dynamic sync immediately
+                    setState(() {
+                      _isLoading = true;
+                    });
+                    
+                    try {
+                      await ProviderScope.containerOf(context)
+                          .read(telemetryServiceProvider)
+                          .syncNow();
+                      await _loadData();
+                    } catch (e) {
+                      print("Error syncing telemetry: $e");
+                    }
+                    
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Battery health calibrated successfully!'),
+                          backgroundColor: AppTheme.success,
+                        ),
+                      );
+                    }
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _sendSupportTicket(BuildContext context) async {
     if (_prediction == null) return;
     
@@ -431,31 +536,42 @@ ${_prediction!.recommendations.map((r) => "[${r.title}]\n${r.description} (Est. 
                     children: [
                       HealthGauge(score: _prediction?.healthScore ?? _displayDevice.healthScore, size: 260)
                           .animate().scale(duration: 600.ms, curve: Curves.easeOutBack),
-                      if (_prediction != null) ...[
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryColor.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3), width: 1),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(PhosphorIcons.shieldCheck(PhosphorIconsStyle.fill), color: AppTheme.primaryColor, size: 14),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Prediction Confidence: ${_prediction!.confidenceLevel.toStringAsFixed(1)}%',
-                                style: const TextStyle(
-                                  color: AppTheme.primaryColor,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryColor.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppTheme.primaryColor.withOpacity(0.3), width: 1),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(PhosphorIcons.shieldCheck(PhosphorIconsStyle.fill), color: AppTheme.primaryColor, size: 14),
+                            const SizedBox(width: 6),
+                            Text(
+                              _prediction != null
+                                  ? 'Prediction Confidence: ${_prediction!.confidenceLevel.toStringAsFixed(1)}%'
+                                  : 'Prediction Confidence: --',
+                              style: const TextStyle(
+                                color: AppTheme.primaryColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
                               ),
-                            ],
+                            ),
+                          ],
+                        ),
+                      ).animate().fadeIn(delay: 200.ms),
+                      if (_displayDevice.type == DeviceType.phone) ...[
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () => _showCalibrationDialog(context),
+                          icon: Icon(PhosphorIcons.wrench(), size: 14, color: AppTheme.textSecondary),
+                          label: Text(
+                            'Calibrate Battery Health',
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                           ),
-                        ).animate().fadeIn(delay: 200.ms),
+                        ),
                       ],
                     ],
                   ),
@@ -559,7 +675,17 @@ ${_prediction!.recommendations.map((r) => "[${r.title}]\n${r.description} (Est. 
                       _buildMetricCard(context, 'CPU Usage', '${_displayDevice.cpuUsage.toStringAsFixed(1)}%', PhosphorIcons.cpu(), _displayDevice.cpuUsage < 80 ? AppTheme.success : AppTheme.warning),
                     ],
                     
-                    _buildMetricCard(context, 'Risk Level', _prediction?.riskLevel ?? 'Unknown', PhosphorIcons.shieldCheck(), _prediction?.riskLevel == 'High Risk' ? AppTheme.critical : AppTheme.success),
+                    _buildMetricCard(
+                       context, 
+                       'Risk Level', 
+                       _prediction?.riskLevel ?? 'Unknown', 
+                       PhosphorIcons.shieldCheck(), 
+                       _prediction?.riskLevel == 'High Risk' 
+                           ? AppTheme.critical 
+                           : (_prediction?.riskLevel == 'Medium Risk' 
+                               ? AppTheme.warning 
+                               : AppTheme.success)
+                     ),
                   ],
                 ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0),
                 
@@ -744,20 +870,32 @@ ${_prediction!.recommendations.map((r) => "[${r.title}]\n${r.description} (Est. 
                 child: Text(
                   _prediction!.riskLevel,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: _prediction!.riskLevel == 'High Risk' ? AppTheme.critical : AppTheme.success,
+                    color: _prediction!.riskLevel == 'High Risk' 
+                        ? AppTheme.critical 
+                        : (_prediction!.riskLevel == 'Medium Risk' 
+                            ? AppTheme.warning 
+                            : AppTheme.success),
                   ),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  color: (_prediction!.riskLevel == 'High Risk' ? AppTheme.critical : AppTheme.success).withOpacity(0.1),
+                  color: (_prediction!.riskLevel == 'High Risk' 
+                      ? AppTheme.critical 
+                      : (_prediction!.riskLevel == 'Medium Risk' 
+                          ? AppTheme.warning 
+                          : AppTheme.success)).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   '${_prediction!.healthScore}%', 
                   style: TextStyle(
-                    color: _prediction!.riskLevel == 'High Risk' ? AppTheme.critical : AppTheme.success, 
+                    color: _prediction!.riskLevel == 'High Risk' 
+                        ? AppTheme.critical 
+                        : (_prediction!.riskLevel == 'Medium Risk' 
+                            ? AppTheme.warning 
+                            : AppTheme.success), 
                     fontWeight: FontWeight.bold
                   ),
                 ),
@@ -863,6 +1001,7 @@ ${_prediction!.recommendations.map((r) => "[${r.title}]\n${r.description} (Est. 
   Widget _buildLifespanCard(BuildContext context) {
     final int batteryLevel = _displayDevice.batteryLevel;
     final bool isCharging = _displayDevice.isCharging;
+    final bool isLaptop = _displayDevice.type == DeviceType.laptop;
     
     String runtimeText = '';
     if (isCharging) {
@@ -874,21 +1013,9 @@ ${_prediction!.recommendations.map((r) => "[${r.title}]\n${r.description} (Est. 
     }
     
     final int healthScore = _prediction?.healthScore ?? _displayDevice.healthScore;
-    double lifespanYears = 3.0;
-    if (healthScore < 100) {
-      final double degRate = (100 - healthScore) / 1.5;
-      lifespanYears = (healthScore - 80) / (degRate > 0 ? degRate : 1.0);
-      if (lifespanYears <= 0) {
-        // Under 80% health, express in remaining months
-        final double remainingMonths = (healthScore - 60) * 0.8;
-        lifespanYears = remainingMonths > 0 ? remainingMonths / 12.0 : 0.1;
-      }
-      if (lifespanYears > 5.0) lifespanYears = 5.0;
-    }
+    final double remainingMonths = _prediction?.remainingUsefulLife ?? 36.0;
     
-    String lifespanText = lifespanYears >= 1.0 
-        ? '${lifespanYears.toStringAsFixed(1)} Years remaining'
-        : '${(lifespanYears * 12).round()} Months remaining';
+    String lifespanText = '${remainingMonths.toStringAsFixed(1)} Months remaining';
     if (healthScore < 60) {
       lifespanText = 'Replace battery immediately';
     }
@@ -897,29 +1024,31 @@ ${_prediction!.recommendations.map((r) => "[${r.title}]\n${r.description} (Est. 
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          Row(
-            children: [
-              Icon(PhosphorIcons.lightning(), color: AppTheme.success, size: 28),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Active Battery Runtime', style: Theme.of(context).textTheme.titleMedium),
-                    const SizedBox(height: 4),
-                    Text(
-                      runtimeText,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppTheme.textSecondary,
-                        fontWeight: FontWeight.bold,
+          if (!isLaptop) ...[
+            Row(
+              children: [
+                Icon(PhosphorIcons.lightning(), color: AppTheme.success, size: 28),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Active Battery Runtime', style: Theme.of(context).textTheme.titleMedium),
+                      const SizedBox(height: 4),
+                      Text(
+                        runtimeText,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: AppTheme.textSecondary,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const Divider(height: 32, color: Colors.white10),
+              ],
+            ),
+            const Divider(height: 32, color: Colors.white10),
+          ],
           Row(
             children: [
               Icon(PhosphorIcons.hourglassHigh(), color: AppTheme.warning, size: 28),

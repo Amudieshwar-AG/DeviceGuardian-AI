@@ -69,6 +69,18 @@ Future<double> getRealRamUsage() async {
   }
 }
 
+  Future<Map<String, double>> getBatteryMetrics() async {
+    try {
+      final Map<dynamic, dynamic> metrics = await batteryChannel.invokeMethod('getBatteryMetrics');
+      return {
+        "healthPercent": (metrics["healthPercent"] as num).toDouble(),
+        "remainingMonths": (metrics["remainingMonths"] as num).toDouble(),
+      };
+    } catch (_) {
+      return {"healthPercent": 100.0, "remainingMonths": 36.0}; // Fallback
+    }
+  }
+
 double getSimulatedCpuUsage() {
   final random = Random();
   return 15.0 + random.nextDouble() * 20.0; // Fluctuates between 15% and 35%
@@ -119,6 +131,20 @@ class TelemetryService {
       final storageUsage = await getRealStorageUsage();
       final ramUsage = await getRealRamUsage();
       final cpuUsage = getSimulatedCpuUsage();
+      final batMetrics = await getBatteryMetrics();
+      
+      final prefs = await SharedPreferences.getInstance();
+      final calibratedHealthVal = prefs.getDouble('calibrated_battery_health');
+      
+      double nativeHealth = batMetrics["healthPercent"]!;
+      double lifespan = batMetrics["remainingMonths"]!;
+      
+      if (calibratedHealthVal != null) {
+        nativeHealth = calibratedHealthVal;
+        lifespan = 36.0 * ((calibratedHealthVal - 80.0) / 20.0);
+        if (lifespan < 0.0) lifespan = 0.0;
+        if (lifespan > 36.0) lifespan = 36.0;
+      }
 
       final payload = {
         "deviceId": _deviceId,
@@ -153,6 +179,11 @@ class TelemetryService {
           },
           "storage": {
             "usage_percent": storageUsage,
+          },
+          "native_remaining_useful_life_months": lifespan,
+          "native_battery_health_percentage": nativeHealth,
+          "health_prediction": {
+            "remaining_useful_life_months": lifespan,
           }
         },
         "updated_at": DateTime.now().toIso8601String(),

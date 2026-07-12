@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -80,8 +81,18 @@ class ProfileScreen extends ConsumerWidget {
             const SizedBox(height: 24),
             
             GlassCard(
-              onTap: () {
-                context.go('/login');
+              onTap: () async {
+                try {
+                  await Supabase.instance.client.auth.signOut();
+                } catch (_) {}
+                try {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove('official_device_uuid');
+                  await prefs.remove('hidden_devices');
+                } catch (_) {}
+                if (context.mounted) {
+                  context.go('/login');
+                }
               },
               padding: const EdgeInsets.all(16),
               child: Row(

@@ -33,6 +33,7 @@ class Prediction {
   final bool isAnomaly;
   final double anomalyScore;
   final double confidenceLevel;
+  final double remainingUsefulLife;
 
   Prediction({
     required this.deviceId,
@@ -43,6 +44,7 @@ class Prediction {
     required this.isAnomaly,
     required this.anomalyScore,
     required this.confidenceLevel,
+    required this.remainingUsefulLife,
   });
 
   factory Prediction.fromJson(Map<String, dynamic> json) {
@@ -58,6 +60,7 @@ class Prediction {
       isAnomaly: json['isAnomaly'] ?? false,
       anomalyScore: (json['anomalyScore'] ?? 0.0).toDouble(),
       confidenceLevel: (json['confidenceLevel'] ?? 100.0).toDouble(),
+      remainingUsefulLife: (json['remainingUsefulLife'] ?? 36.0).toDouble(),
     );
   }
 }

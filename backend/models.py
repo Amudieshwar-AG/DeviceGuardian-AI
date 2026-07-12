@@ -13,6 +13,7 @@ class DeviceRecord(Base):
     deviceType = Column(String)
     status = Column(String)
     lastUpdated = Column(DateTime, default=datetime.utcnow)
+    remainingUsefulLife = Column(Float, default=36.0)
 
 class TelemetryRecord(Base):
     __tablename__ = "telemetry"
@@ -74,6 +75,7 @@ class PredictionResponse(BaseModel):
     isAnomaly: bool
     anomalyScore: float
     confidenceLevel: float
+    remainingUsefulLife: float = 36.0
 
 class SupportTicketRequest(BaseModel):
     deviceId: str

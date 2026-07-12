@@ -57,6 +57,21 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // ── DEMO MODE BYPASS (works even when Supabase is down) ──────────────
+      final inputId = _emailController.text.trim().toLowerCase();
+      final inputPw = _passwordController.text;
+      if ((inputId == 'demo' || inputId == 'demo@demo.com') && inputPw == 'demo123') {
+        final prefs = await SharedPreferences.getInstance();
+        String? myUuid = prefs.getString('official_device_uuid');
+        if (myUuid == null) {
+          myUuid = const Uuid().v4();
+          await prefs.setString('official_device_uuid', myUuid);
+        }
+        if (mounted) context.go('/home');
+        return;
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
       if (_isLogin) {
         String loginIdentifier = _emailController.text.trim();
         String actualEmail = loginIdentifier;
@@ -67,7 +82,24 @@ class _LoginScreenState extends State<LoginScreen> {
           if (mappedEmail != null) {
             actualEmail = mappedEmail;
           } else {
-            throw Exception("Username not found on this device. Please log in with your Email.");
+            try {
+              final res = await Supabase.instance.client
+                  .from('device_mappings')
+                  .select('device_uuid')
+                  .eq('username', loginIdentifier)
+                  .like('device_uuid', 'email_map:%')
+                  .maybeSingle();
+
+              if (res != null && res['device_uuid'] != null) {
+                final mapped = res['device_uuid'] as String;
+                actualEmail = mapped.replaceFirst('email_map:', '');
+                await prefs.setString('username_map_$loginIdentifier', actualEmail);
+              } else {
+                throw Exception("Username not found. Please log in with your Email.");
+              }
+            } catch (e) {
+              throw Exception("Username not found. Please log in with your Email.");
+            }
           }
         }
         
@@ -139,6 +171,14 @@ class _LoginScreenState extends State<LoginScreen> {
         final prefs = await SharedPreferences.getInstance();
         if (usernameToUse.isNotEmpty) {
           await prefs.setString('username_map_$usernameToUse', emailToUse);
+          try {
+            await Supabase.instance.client.from('device_mappings').insert({
+              'username': usernameToUse,
+              'device_uuid': 'email_map:$emailToUse',
+            });
+          } catch (e) {
+            debugPrint('Error inserting username mapping to Supabase: $e');
+          }
         }
         await prefs.setString('official_device_uuid', newDeviceUuid);
         

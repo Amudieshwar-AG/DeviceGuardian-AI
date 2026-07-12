@@ -19,7 +19,14 @@ load_dotenv()
 
 models.Base.metadata.create_all(bind=engine)
 
-# Force reload comment 6
+# Safely run migrations for newly added columns
+try:
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        conn.execute(text("ALTER TABLE devices ADD COLUMN remainingUsefulLife REAL DEFAULT 36.0"))
+        conn.commit()
+except Exception:
+    pass
 app = FastAPI(title="DeviceGuardian AI Backend")
 
 app.add_middleware(
@@ -102,6 +109,18 @@ def register_device(telemetry: models.TelemetryCreate, db: Session = Depends(get
     
     return {"message": "Telemetry received successfully"}
 
+@app.delete("/devices/{device_id}")
+def delete_device(device_id: str, db: Session = Depends(get_db)):
+    device = db.query(models.DeviceRecord).filter(models.DeviceRecord.id == device_id).first()
+    if device:
+        # Delete related telemetry and predictions
+        db.query(models.TelemetryRecord).filter(models.TelemetryRecord.deviceId == device_id).delete()
+        db.query(models.AIPrediction).filter(models.AIPrediction.deviceId == device_id).delete()
+        db.delete(device)
+        db.commit()
+        return {"message": "Device deleted successfully"}
+    return {"message": "Device not found"}
+
 @app.get("/devices")
 def get_devices(db: Session = Depends(get_db)):
     devices = db.query(models.DeviceRecord).all()
@@ -140,6 +159,9 @@ def get_devices(db: Session = Depends(get_db)):
             try:
                 prediction = run_ai_pipeline(telemetry_dict, all_telemetry)
                 health = prediction["healthScore"]
+                if d.deviceType == "phone":
+                    rul = d.remainingUsefulLife if d.remainingUsefulLife is not None else 36.0
+                    health = int(round(80 + 20 * (rul / 36.0)))
             except Exception as e:
                 print(f"Error running pipeline in list API: {e}")
             
@@ -169,17 +191,69 @@ def sync_device_from_supabase(device_id: str, db: Session):
             payload = data.get("payload", {})
             name = data.get("device_name", "Unknown Device")
             
-            battery = float(payload.get("battery", {}).get("level", 100.0))
-            temp = float(payload.get("cpu", {}).get("temperature_c", 35.0))
-            ssd = float(payload.get("storage", {}).get("usage_percent", 50.0))
-            cpu = float(payload.get("cpu", {}).get("usage_percent", 20.0))
-            ram = float(payload.get("memory", {}).get("usage_percent", 50.0))
-            is_charging = payload.get("battery", {}).get("is_charging", False)
+            def safe_float(val, default=0.0):
+                if val is None:
+                    return default
+                if isinstance(val, str):
+                    val = val.replace("%", "").strip()
+                try:
+                    return float(val)
+                except (ValueError, TypeError):
+                    return default
+
+            battery_map = payload.get("battery") if isinstance(payload.get("battery"), dict) else {}
+            cpu_map = payload.get("cpu") if isinstance(payload.get("cpu"), dict) else {}
+            storage_map = payload.get("storage") if isinstance(payload.get("storage"), dict) else {}
+            memory_map = payload.get("memory") if isinstance(payload.get("memory"), dict) else {}
+
+            battery_val = battery_map.get("level") if battery_map.get("level") is not None else battery_map.get("percentage")
+            battery = safe_float(battery_val, 100.0)
+
+            temp = safe_float(cpu_map.get("temperature_c"), 35.0)
+            if temp == 35.0 and cpu_map.get("gpu_temperature_c") is not None:
+                temp = safe_float(cpu_map.get("gpu_temperature_c"), 35.0)
+
+            ssd_val = storage_map.get("usage_percent") if storage_map.get("usage_percent") is not None else storage_map.get("disk_usage_percent")
+            ssd = safe_float(ssd_val, 50.0)
+
+            cpu = safe_float(cpu_map.get("usage_percent"), 20.0)
+
+            ram_val = memory_map.get("usage_percent") if memory_map.get("usage_percent") is not None else memory_map.get("ram_usage_percent")
+            ram = safe_float(ram_val, 50.0)
+
+            is_charging = battery_map.get("is_charging") if battery_map.get("is_charging") is not None else battery_map.get("charging")
+            is_charging = True if is_charging in [True, "true", "True"] else False
             status = "Charging" if is_charging else "Healthy"
             
             device_type = "phone"
-            if "windows" in name.lower() or "laptop" in name.lower() or "pc" in name.lower() or "ashwin" in name.lower():
+            system_map = payload.get("system") if isinstance(payload.get("system"), dict) else {}
+            win_version = str(system_map.get("windows_version", "")).lower()
+            if (
+                "windows" in name.lower() or 
+                "laptop" in name.lower() or 
+                "pc" in name.lower() or 
+                "ashwin" in name.lower() or 
+                "amudieshwar" in name.lower() or
+                "devesh" in name.lower() or
+                "windows" in win_version or
+                "gpus" in payload or
+                "disk_health" in payload
+            ):
                 device_type = "laptop"
+
+            # Parse actual timestamp from Supabase if available
+            try:
+                updated_at_str = data.get("updated_at", "")
+                actual_timestamp = datetime.fromisoformat(updated_at_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            except Exception:
+                actual_timestamp = datetime.utcnow()
+
+            # Parse remaining useful life from health_prediction payload
+            if device_type == "phone":
+                rul_val = payload.get("native_remaining_useful_life_months") or payload.get("health_prediction", {}).get("remaining_useful_life_months", 36.0)
+            else:
+                rul_val = payload.get("health_prediction", {}).get("remaining_useful_life_months", 36.0)
+            rul = safe_float(rul_val, 36.0)
 
             device = db.query(models.DeviceRecord).filter(models.DeviceRecord.id == device_id).first()
             if not device:
@@ -187,9 +261,17 @@ def sync_device_from_supabase(device_id: str, db: Session):
                     id=device_id,
                     name=name,
                     deviceType=device_type,
-                    status=status
+                    status=status,
+                    lastUpdated=actual_timestamp,
+                    remainingUsefulLife=rul
                 )
                 db.add(device)
+            else:
+                device.name = name
+                device.deviceType = device_type
+                device.status = status
+                device.lastUpdated = actual_timestamp
+                device.remainingUsefulLife = rul
             
             new_telemetry = models.TelemetryRecord(
                 deviceId=device_id,
@@ -197,7 +279,8 @@ def sync_device_from_supabase(device_id: str, db: Session):
                 ram=ram,
                 battery=battery,
                 temperature=temp,
-                ssd=ssd
+                ssd=ssd,
+                timestamp=actual_timestamp
             )
             db.add(new_telemetry)
             db.commit()
@@ -252,6 +335,9 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
         try:
             prediction = run_ai_pipeline(telemetry_dict, all_telemetry)
             health = prediction["healthScore"]
+            if device.deviceType == "phone":
+                rul = device.remainingUsefulLife if device.remainingUsefulLife is not None else 36.0
+                health = int(round(80 + 20 * (rul / 36.0)))
         except Exception as e:
             print(f"Error running pipeline in detail API: {e}")
             
@@ -260,7 +346,7 @@ def get_device(device_id: str, db: Session = Depends(get_db)):
         "name": device.name,
         "type": device.deviceType,
         "status": device.status,
-        "lastUpdated": device.lastUpdated.isoformat(),
+        "lastUpdated": (latest_telemetry.timestamp if latest_telemetry else device.lastUpdated).isoformat(),
         "battery": battery,
         "temperature": temp,
         "ssd": ssd,
@@ -316,7 +402,95 @@ def get_prediction(device_id: str, db: Session = Depends(get_db)):
     
     prediction_result = run_ai_pipeline(telemetry_dict, all_telemetry)
     
-    # 4. Log the prediction run to SQLite database
+    # 4. Extract remainingUsefulLife from SQLite DeviceRecord
+    device = db.query(models.DeviceRecord).filter(models.DeviceRecord.id == device_id).first()
+    rul = device.remainingUsefulLife if (device and device.remainingUsefulLife is not None) else 36.0
+    prediction_result["remainingUsefulLife"] = rul
+    
+    if device and device.deviceType == "phone":
+        payload = {}
+        import requests
+        url = f"https://lonsqhuudhiffjitmcbh.supabase.co/rest/v1/telemetry?device_uuid=eq.{device_id}&order=updated_at.desc&limit=1"
+        headers = {
+            "apikey": "sb_publishable_huLEhuc-J4bal6hQRkPf5w_O16MKv6V",
+            "Authorization": "Bearer sb_publishable_huLEhuc-J4bal6hQRkPf5w_O16MKv6V"
+        }
+        try:
+            r = requests.get(url, headers=headers, timeout=2)
+            if r.status_code == 200 and r.json():
+                payload = r.json()[0].get("payload", {})
+        except Exception:
+            pass
+
+        rul = payload.get("native_remaining_useful_life_months", device.remainingUsefulLife if device.remainingUsefulLife is not None else 36.0)
+        native_health = payload.get("native_battery_health_percentage", None)
+        
+        prediction_result["remainingUsefulLife"] = rul
+        prediction_result["remaining_useful_life_months"] = rul
+        
+        def local_safe_float(val, default=0.0):
+            if val is None:
+                return default
+            if isinstance(val, str):
+                val = val.replace("%", "").strip()
+            try:
+                return float(val)
+            except:
+                return default
+
+        cpu_map = payload.get("cpu") if isinstance(payload.get("cpu"), dict) else {}
+        battery_map = payload.get("battery") if isinstance(payload.get("battery"), dict) else {}
+        storage_map = payload.get("storage") if isinstance(payload.get("storage"), dict) else {}
+        memory_map = payload.get("memory") if isinstance(payload.get("memory"), dict) else {}
+
+        if native_health is not None:
+            base_health = float(native_health)
+        else:
+            # Fallback mapping: RUL (36->0) corresponds to health (100->80)
+            base_health = 80.0 + 20.0 * (rul / 36.0)
+
+        # Apply operational deductions to get overall health score
+        deductions = 0.0
+        
+        # 1. Thermal deductions
+        temp_val = local_safe_float(cpu_map.get("temperature_c") if cpu_map.get("temperature_c") is not None else cpu_map.get("gpu_temperature_c"), 35.0)
+        if temp_val > 38.0:
+            deductions += (temp_val - 38.0) * 1.5
+        if temp_val > 42.0:
+            deductions += (temp_val - 42.0) * 1.0 # additional weight
+            
+        # 2. Storage deductions
+        storage_val = local_safe_float(storage_map.get("usage_percent") if storage_map.get("usage_percent") is not None else storage_map.get("disk_usage_percent"), 0.0)
+        if storage_val > 75.0:
+            deductions += (storage_val - 75.0) * 0.4
+            
+        # 3. CPU/RAM load deductions
+        cpu_val = local_safe_float(cpu_map.get("usage_percent"), 0.0)
+        if cpu_val > 80.0:
+            deductions += (cpu_val - 80.0) * 0.2
+            
+        ram_val = local_safe_float(memory_map.get("usage_percent") if memory_map.get("usage_percent") is not None else memory_map.get("ram_usage_percent"), 0.0)
+        if ram_val > 80.0:
+            deductions += (ram_val - 80.0) * 0.3
+            
+        final_health = max(0, min(100, int(round(base_health - deductions))))
+        prediction_result["healthScore"] = final_health
+            
+        # Resource-based risk escalation (Operational Risk)
+        battery_level = local_safe_float(battery_map.get("level") if battery_map.get("level") is not None else battery_map.get("percentage"), 100.0)
+        storage_usage = local_safe_float(storage_map.get("usage_percent") if storage_map.get("usage_percent") is not None else storage_map.get("disk_usage_percent"), 0.0)
+        
+        if prediction_result["healthScore"] >= 85:
+            if (battery_level < 15 and battery_level > 0) or storage_usage > 75:
+                prediction_result["riskLevel"] = "Medium Risk"
+            else:
+                prediction_result["riskLevel"] = "Low Risk"
+        elif prediction_result["healthScore"] >= 75:
+            prediction_result["riskLevel"] = "Medium Risk"
+        else:
+            prediction_result["riskLevel"] = "High Risk"
+            
+    # 5. Log the prediction run to SQLite database
     db_pred = models.AIPrediction(
         deviceId=device_id,
         healthScore=prediction_result["healthScore"],
