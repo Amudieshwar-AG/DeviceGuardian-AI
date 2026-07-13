@@ -14,7 +14,13 @@ app = FastAPI(title="DeviceGuardian AI - Mock Backend", version="1.0.0")
 # Enable CORS for frontend API calls
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://device-guardian-ai.vercel.app",
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
