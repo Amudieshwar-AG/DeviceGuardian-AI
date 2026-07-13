@@ -709,8 +709,9 @@ document.addEventListener("DOMContentLoaded", () => {
                             system: { device_name: row.name },
                             cpu: { usage_percent: 15.0, temperature_c: 35.0 },
                             battery: { percentage: row.battery || 100, charging: row.status === "Charging", health: "100%" },
-                            memory: { ram_usage_percent: 50.0 },
-                            storage: { disk_usage_percent: 45.0 },
+                            memory: { ram_usage_percent: 50.0, total_ram: 8 * 1024 * 1024 * 1024, used_ram: 4 * 1024 * 1024 * 1024 },
+                            storage: { disk_usage_percent: 45.0, total_space_bytes: 128 * 1024 * 1024 * 1024, free_space_bytes: 70 * 1024 * 1024 * 1024, used_space_bytes: 58 * 1024 * 1024 * 1024 },
+                            disk_health: { smart_status: "OK", errors: 0 },
                             health_prediction: {
                                 health: row.healthScore || 100,
                                 remaining_useful_life_months: 36,
