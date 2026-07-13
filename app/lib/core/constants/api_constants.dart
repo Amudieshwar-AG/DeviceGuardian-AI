@@ -1,6 +1,6 @@
 class ApiConstants {
   // Toggle this to false when compiling the release build (.apk) for the jury
-  static const bool isDevelopment = true;
+  static const bool isDevelopment = false;
 
   // Base URLs
   static const String devUrl = 'http://127.0.0.1:8000';

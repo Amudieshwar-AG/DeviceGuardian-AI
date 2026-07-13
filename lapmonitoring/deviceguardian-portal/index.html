@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="DeviceGuardian AI Portal - Download the lightweight Windows Monitoring Agent and review live system telemetry metrics securely.">
+    <title>DeviceGuardian AI - Download Portal</title>
+    <!-- Import Outfit & Inter fonts from Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- Lucide Icons for vanilla HTML/JS -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+    <!-- Login View Container -->
+    <div id="login-view" class="login-view-container">
+        <canvas id="particles" class="particles-canvas"></canvas>
+
+        <div class="theme-toggle" id="theme-toggle-btn">
+            <i data-lucide="moon"></i>
+        </div>
+
+        <div class="login-card">
+            <div class="login-card-inner">
+                <div class="login-header">
+                    <h1 id="login-title">Welcome</h1>
+                    <p id="login-subtitle">Please sign in to continue</p>
+                </div>
+
+                <form class="login-form" id="login-form-el">
+                    <div class="form-field" id="email-field">
+                        <input type="text" id="email" required autocomplete="off" />
+                        <label for="email">Username or Email Address</label>
+                        <span class="error-message" id="email-error" style="display: none;">Please enter a valid username/email</span>
+                    </div>
+
+                    <div class="form-field" id="password-field">
+                        <input type="password" id="password" required />
+                        <label for="password">Password</label>
+                        <button type="button" class="toggle-password" id="btn-toggle-password" aria-label="Toggle password">
+                            <i data-lucide="eye"></i>
+                        </button>
+                    </div>
+
+                    <div class="form-options">
+                        <label class="remember-me">
+                            <input type="checkbox" id="remember-me-checkbox" />
+                            <span class="checkmark"></span>
+                            Remember me
+                        </label>
+
+                        <a href="#" class="forgot-password">Forgot Password?</a>
+                    </div>
+
+                    <button type="submit" class="login-button" id="btn-login-submit">Sign In</button>
+                </form>
+
+                <div class="separator">
+                    <span>or continue with</span>
+                </div>
+
+                <div class="social-login">
+                    <button class="social-button github" type="button">
+                        <i data-lucide="github"></i>
+                    </button>
+                    <button class="social-button twitter" type="button">
+                        <i data-lucide="twitter"></i>
+                    </button>
+                    <button class="social-button linkedin" type="button">
+                        <i data-lucide="linkedin"></i>
+                    </button>
+                </div>
+
+                <p class="signup-prompt" id="signup-prompt-el">
+                    Don't have an account? <a href="#" id="toggle-signup-link">Sign up</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main App Container (Hidden when not logged in) -->
+    <div id="app-view" style="display: none;">
+        <!-- Navigation Header -->
+        <header class="app-header">
+            <div class="header-container">
+                <div class="logo-area" style="display: flex; align-items: center; gap: 8px;">
+                    <img src="logo.png" alt="DeviceGuardian Logo" style="height: 28px; width: 28px; object-fit: contain;" />
+                    <span class="logo-text">DeviceGuardian <span class="accent-text">AI</span></span>
+                </div>
+                <nav class="nav-links">
+                    <a href="#features">Features</a>
+                    <a href="#dashboard">Dashboard Preview</a>
+                    <a href="#download" class="nav-btn">Download Installer</a>
+                    <span id="user-display" class="user-display-tag" style="display: none; margin-right: 12px; font-size: 0.9rem; color: #94A3B8; font-weight: 500;"></span>
+                    <a href="#" id="btn-nav-signout" class="nav-btn" style="background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.25); color: #F87171 !important; display: none;">Sign Out</a>
+                </nav>
+            </div>
+        </header>
+
+    <!-- Main Container -->
+    <main>
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="hero-content">
+                <span class="badge">Windows Monitoring Agent</span>
+                <h1 class="hero-title">Continuous Device Telemetry. <br><span class="gradient-text">Secured by Intelligence.</span></h1>
+                <p class="hero-subtitle">
+                    A lightweight background service that collects deep hardware diagnostics, supports offline SQLite caching, and securely syncs telemetry to FastAPI.
+                </p>
+                <div class="hero-actions">
+                    <a href="#download" class="btn-primary" id="btn-hero-download">
+                        <span>Get Windows Installer</span>
+                        <span class="btn-arrow">→</span>
+                    </a>
+                    <a href="#dashboard" class="btn-secondary">Explore Live Demo</a>
+                </div>
+            </div>
+            <div class="hero-graphic">
+                <div class="shield-container">
+                    <div class="glow-ring"></div>
+                    <div class="glow-ring-inner"></div>
+                    <div class="core-shield">DG</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Interactive Telemetry Dashboard Section -->
+        <section id="dashboard" class="dashboard-section">
+            <div class="section-header">
+                <h2>Real-Time Telemetry Dashboard</h2>
+                <p>Monitor your machines actively connected to the DeviceGuardian network</p>
+                <div class="device-select-wrapper" style="display: flex; align-items: center; gap: 12px; margin-top: 12px; justify-content: center;">
+                    <label for="device-select" class="device-select-label">Active Laptop: </label>
+                    <select id="device-select" class="device-dropdown">
+                        <option value="simulation">📡 Demo Simulation (No Active Devices)</option>
+                    </select>
+                    <button id="btn-remove-device" class="btn-remove" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #F87171; padding: 6px 12px; border-radius: 8px; font-size: 0.85rem; font-weight: 600; cursor: pointer; display: none; align-items: center; gap: 4px; transition: all 0.2s ease;">
+                        <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i> Remove Device
+                    </button>
+                </div>
+            </div>
+            
+            <div class="dashboard-grid">
+                <!-- AI Health Prediction Card -->
+                <div class="card dashboard-card">
+                    <div class="card-header">
+                        <h3>AI Health Prediction</h3>
+                        <span class="status-indicator live" id="ai-health-indicator">AI ACTIVE</span>
+                    </div>
+                    <div class="dial-container">
+                        <div class="progress-dial" id="ai-health-dial" style="--percent: 100;">
+                            <div class="dial-inner">
+                                <span class="dial-value" id="ai-health-val">100%</span>
+                                <span class="dial-label">System Health</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="metric-row">
+                            <span>Failure Risk</span>
+                            <strong id="ai-risk-val" class="risk-badge low">Low</strong>
+                        </div>
+                        <div class="metric-row" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; margin-top: 8px;">
+                            <span>Remaining Useful Life (RUL)</span>
+                            <strong id="ai-rul-val">N/A</strong>
+                        </div>
+                        <div class="metric-row" style="flex-direction: column; align-items: flex-start; gap: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; margin-top: 8px;">
+                            <span>AI Diagnostics:</span>
+                            <ul id="ai-explanations" style="margin: 4px 0 0 0; padding-left: 16px; font-size: 0.85rem; color: #94A3B8; width: 100%; list-style-type: disc;">
+                                <li>All metrics within nominal limits</li>
+                            </ul>
+                        </div>
+                        <div class="metric-row" style="flex-direction: column; align-items: flex-start; gap: 4px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; margin-top: 8px;">
+                            <span>Health Deductions (SHAP):</span>
+                            <ul id="ai-shap-contribs" style="margin: 4px 0 0 0; padding-left: 0; font-size: 0.85rem; color: #F87171; width: 100%; list-style-type: none;">
+                                <li>None (100% healthy)</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CPU Dial -->
+                <div class="card dashboard-card">
+                    <div class="card-header">
+                        <h3>CPU Diagnostics</h3>
+                        <span class="status-indicator live">LIVE</span>
+                    </div>
+                    <div class="dial-container">
+                        <div class="progress-dial" id="cpu-dial" style="--percent: 34;">
+                            <div class="dial-inner">
+                                <span class="dial-value" id="cpu-val">34%</span>
+                                <span class="dial-label">Usage</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="metric-row">
+                            <span>Frequency</span>
+                            <strong id="cpu-freq">2.2 GHz</strong>
+                        </div>
+                        <div class="metric-row">
+                            <span>Temperature</span>
+                            <strong id="cpu-temp">20.1°C</strong>
+                        </div>
+                        <!-- Dynamic GPU List -->
+                        <div id="gpu-list-container">
+                            <div class="metric-row">
+                                <span>GPU Utilization</span>
+                                <strong id="gpu-util">N/A</strong>
+                            </div>
+                            <div class="metric-row">
+                                <span>GPU Temp</span>
+                                <strong id="gpu-temp">N/A</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Memory Dial -->
+                <div class="card dashboard-card">
+                    <div class="card-header">
+                        <h3>Memory Status</h3>
+                        <span class="status-indicator live">LIVE</span>
+                    </div>
+                    <div class="dial-container">
+                        <div class="progress-dial" id="ram-dial" style="--percent: 79;">
+                            <div class="dial-inner">
+                                <span class="dial-value" id="ram-val">79%</span>
+                                <span class="dial-label">Utilized</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="metric-row">
+                            <span>Total RAM</span>
+                            <strong id="ram-total">16 GB</strong>
+                        </div>
+                        <div class="metric-row">
+                            <span>Free RAM</span>
+                            <strong id="ram-free">3.3 GB</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Health & Battery -->
+                <div class="card dashboard-card">
+                    <div class="card-header">
+                        <h3>System Power & Storage</h3>
+                        <span class="status-indicator live">LIVE</span>
+                    </div>
+                    <div class="power-container">
+                        <!-- Battery -->
+                        <div class="metric-block">
+                            <span class="block-label">Battery Level</span>
+                            <div class="bar-container">
+                                <div class="bar-fill" id="battery-bar" style="width: 97%;"></div>
+                            </div>
+                            <div class="block-sub">
+                                <span id="battery-level-text">97% (Charging)</span>
+                                <span id="battery-health">Health: 90%</span>
+                            </div>
+                        </div>
+
+                        <!-- Disk SMART -->
+                        <div class="metric-block">
+                            <span class="block-label">SSD Health Prediction (SMART)</span>
+                            <div class="smart-status-badge healthy" id="smart-status">
+                                <span class="status-icon">✓</span>
+                                <span class="status-text">HEALTHY (OK)</span>
+                            </div>
+                            <div class="block-sub">
+                                <span>Errors Detected: 0</span>
+                                <span>No warnings reported</span>
+                            </div>
+                        </div>
+
+                        <!-- SSD Storage -->
+                        <div class="metric-block">
+                            <span class="block-label">SSD Storage Used</span>
+                            <div class="bar-container">
+                                <div class="bar-fill" id="storage-bar" style="width: 0%;"></div>
+                            </div>
+                            <div class="block-sub">
+                                <span id="storage-used-text">N/A</span>
+                                <span id="storage-free-text">Free: N/A</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Grid Section -->
+        <section id="features" class="features-section">
+            <div class="section-header">
+                <h2>Engineered for Security and Reliability</h2>
+                <p>Features that make DeviceGuardian AI suitable for enterprise telemetry monitoring</p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="card feature-card">
+                    <div class="feature-icon">📁</div>
+                    <h3>Offline Resiliency</h3>
+                    <p>If network connection drops, telemetry logs are immediately cached to a local SQLite queue and synced automatically once connection returns.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">⚙️</div>
+                    <h3>Silent Execution</h3>
+                    <p>Runs as a lightweight service in the background. The system tray allows pausing, manual syncs, and status reports in one-click.</p>
+                </div>
+                <div class="card feature-card">
+                    <div class="feature-icon">🛡️</div>
+                    <h3>Secure JWT Auth</h3>
+                    <p>Supports robust token-based credentials authentication with custom encryption headers on every upload endpoint.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Download Section -->
+        <section id="download" class="download-section">
+            <div class="download-container card">
+                <h2>Get Started with DeviceGuardian AI</h2>
+                <p>Deploy the monitoring service on your Windows device in less than a minute.</p>
+                
+                <div class="download-box">
+                    <div class="install-info">
+                        <h3>DeviceGuardian AI Standalone Agent</h3>
+                        <p>Standalone silent background agent executable (pre-compiled and ready to run).</p>
+                        <span class="meta-info">File: DeviceGuardianAgent.exe | Size: ~59 MB | OS: Windows 10 / 11 (64-bit)</span>
+                    </div>
+                    
+                    <a href="DeviceGuardianAgent.exe" class="btn-download" download id="btn-download-installer">
+                        📥 Download Standalone Agent (.exe)
+                    </a>
+                </div>
+
+                <!-- Setup Instructions -->
+                <div class="setup-instructions">
+                    <h3>⚙️ Installation & Run Instructions</h3>
+                    <div class="instructions-grid">
+                        <div class="step-card">
+                            <span class="step-num">1</span>
+                            <h4>Download & Move</h4>
+                            <p>Download the <code>DeviceGuardianAgent.exe</code> binary and place it in a dedicated directory on your laptop.</p>
+                        </div>
+                        <div class="step-card">
+                            <span class="step-num">2</span>
+                            <h4>Run as Administrator</h4>
+                            <p>Right-click the executable and select <strong>"Run as administrator"</strong> to enable motherboard thermal sensor access.</p>
+                        </div>
+                        <div class="step-card">
+                            <span class="step-num">3</span>
+                            <h4>Link Your Account</h4>
+                            <p>On startup, a secure dialog will pop up. Enter your portal email (e.g. <code>sagar@gmail.com</code>) to instantly link this device.</p>
+                        </div>
+                        <div class="step-card">
+                            <span class="step-num">4</span>
+                            <h4>Monitor Real-Time</h4>
+                            <p>The agent will run silently in your System Tray. Check your dashboard dropdown to select the device and view live analytics!</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <p>&copy; 2026 DeviceGuardian AI project. Built for Hackathon.</p>
+    </footer>
+
+    </div> <!-- Close app-view -->
+
+    <script src="app.js?v=1.0.9"></script>
+</body>
+</html>
