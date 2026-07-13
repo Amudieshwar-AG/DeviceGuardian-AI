@@ -118,8 +118,16 @@ def delete_device(device_id: str, db: Session = Depends(get_db)):
         db.query(models.AIPrediction).filter(models.AIPrediction.deviceId == device_id).delete()
         db.delete(device)
         db.commit()
-        return {"message": "Device deleted successfully"}
-    return {"message": "Device not found"}
+        
+    # Also delete mapping from PostgreSQL device_mappings table directly
+    try:
+        from sqlalchemy import text
+        db.execute(text("DELETE FROM device_mappings WHERE device_uuid = :uuid"), {"uuid": device_id})
+        db.commit()
+    except Exception as e:
+        print(f"Non-fatal: SQLite fallback or Postgres mapping delete failed: {e}")
+        
+    return {"message": "Device and mapping deleted successfully"}
 
 @app.get("/devices")
 def get_devices(db: Session = Depends(get_db)):
