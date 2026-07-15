@@ -1,3 +1,5 @@
+import 'package:permission_handler/permission_handler.dart';
+import '../../services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -67,7 +69,24 @@ class ProfileScreen extends ConsumerWidget {
               _buildSwitchTile(context, 'Dark Mode', PhosphorIcons.moon(), isDark, (val) {
                 ref.read(themeModeProvider.notifier).toggle(val);
               }),
-              _buildSwitchTile(context, 'Notifications', PhosphorIcons.bell(), true, (val) {}),
+              _buildListTile(context, 'Test Notifications', PhosphorIcons.bell(), 'Tap to test system alert', () async {
+                final status = await Permission.notification.request();
+                if (status.isGranted) {
+                  await ref.read(appNotificationServiceProvider).showNativeNotification(
+                    "Notification Test Successful! 🔔",
+                    "System notifications are fully enabled and active."
+                  );
+                } else {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Notification permission denied. Please allow in App Settings."),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                }
+              }),
               _buildListTile(context, 'Language', PhosphorIcons.translate(), 'English', () {}),
             ], 400),
             

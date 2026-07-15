@@ -6,6 +6,10 @@ import 'core/theme/app_theme.dart';
 import 'core/navigation/app_router.dart';
 import 'services/telemetry_service.dart';
 
+import 'services/device_service.dart';
+import 'services/notification_service.dart';
+import 'models/device.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -52,6 +56,13 @@ class _DeviceGuardianAppState extends ConsumerState<DeviceGuardianApp> {
   @override
   Widget build(BuildContext context) {
     final themeMode = ref.watch(themeModeProvider);
+
+    // Listen to myDevicesProvider to push native OS notifications when status becomes critical/warning
+    ref.listen<AsyncValue<List<Device>>>(myDevicesProvider, (previous, next) {
+      next.whenData((devices) {
+        ref.read(appNotificationServiceProvider).processDeviceUpdates(devices);
+      });
+    });
 
     return MaterialApp.router(
       title: 'DeviceGuardian AI',

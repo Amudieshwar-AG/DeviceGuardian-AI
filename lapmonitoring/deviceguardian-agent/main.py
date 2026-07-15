@@ -75,13 +75,14 @@ class DeviceGuardianAgent:
         self.tray_app.run()
 
     def _monitoring_loop(self) -> None:
-        """Background loop executing collection tasks at specified sampling intervals."""
+        """Background loop executing collection tasks at specified sampling intervals with drift compensation."""
         logger.info("Telemetry collection thread started.")
         
         # Initial wait/sync on startup
         time.sleep(2)
         
         while not self.stop_event.is_set():
+            start_time = time.time()
             if not self.is_paused:
                 try:
                     logger.info("Starting telemetry extraction...")
@@ -91,12 +92,24 @@ class DeviceGuardianAgent:
                 except Exception as e:
                     logger.critical(f"Critical error in collection loop: {e}", exc_info=True)
             
-            # Sleep in small slices to remain responsive to quick exits/interval changes
+            # Calculate elapsed time and compensate sleep interval
+            elapsed = time.time() - start_time
             interval = config_manager.sampling_interval
-            for _ in range(interval):
+            remaining_sleep = max(0.0, float(interval) - elapsed)
+            
+            logger.info(f"Cycle completed in {elapsed:.2f}s. Remaining interval sleep: {remaining_sleep:.2f}s.")
+            
+            # Sleep in small slices (1 second increments) to remain responsive to quick exits/interval changes
+            sleep_slices = int(remaining_sleep)
+            fractional_sleep = remaining_sleep - sleep_slices
+            
+            for _ in range(sleep_slices):
                 if self.stop_event.is_set():
                     break
                 time.sleep(1)
+                
+            if not self.stop_event.is_set() and fractional_sleep > 0:
+                time.sleep(fractional_sleep)
 
         logger.info("Telemetry collection thread terminating.")
 

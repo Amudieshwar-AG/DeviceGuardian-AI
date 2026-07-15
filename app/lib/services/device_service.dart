@@ -64,9 +64,14 @@ class DeviceService {
       }
       healthScore = (baseHealth - deductions).round().clamp(0, 100);
     } else {
-      healthScore = (80 + 20 * (rul / 36.0)).round();
-      if (nativeHealth != null) {
-        healthScore = (nativeHealth as num).toInt();
+      final aiHealth = healthPred['health'];
+      if (aiHealth != null) {
+        healthScore = (aiHealth as num).round();
+      } else {
+        healthScore = (80 + 20 * (rul / 36.0)).round();
+        if (nativeHealth != null) {
+          healthScore = (nativeHealth as num).toInt();
+        }
       }
     }
     
@@ -120,7 +125,6 @@ class DeviceService {
             .inFilter('device_uuid', deviceUuids);
 
         List<Device> devices = [];
-        final List<Future<void>> futures = [];
 
         for (var row in telemetryData) {
           final deviceUuid = row['device_uuid'] as String;
@@ -134,49 +138,13 @@ class DeviceService {
             payload = Map<String, dynamic>.from(row['payload']);
           }
 
-          futures.add(() async {
-            try {
-              final response = await http.get(
-                Uri.parse('${ApiConstants.baseUrl}/devices/$deviceUuid'),
-              ).timeout(const Duration(seconds: 4));
-
-              if (response.statusCode == 200) {
-                final data = jsonDecode(response.body) as Map<String, dynamic>;
-                final double temperature = (data['temperature'] ?? 30.0).toDouble();
-                final double ramUsage = (data['ram'] ?? 50.0).toDouble();
-                final double cpuUsage = (data['cpu'] ?? 20.0).toDouble();
-                final double ssdUsage = (data['ssd'] ?? 50.0).toDouble();
-                final int batteryLevel = (data['battery'] ?? 100).toInt();
-                final int aiHealthScore = (data['healthScore'] ?? 100).toInt();
-                final String statusStr = data['status'] ?? 'healthy';
-                final String typeStr = data['type'] ?? 'phone';
-
-                devices.add(Device.fromJson({
-                  'id': deviceUuid,
-                  'name': data['name'] ?? payload['system']?['device_name'] ?? row['device_name'] ?? 'My Device',
-                  'type': typeStr,
-                  'healthScore': aiHealthScore, // XGBoost AI Score
-                  'batteryLevel': batteryLevel,
-                  'temperature': temperature,
-                  'cpuUsage': cpuUsage,
-                  'ramUsage': ramUsage,
-                  'ssdUsage': ssdUsage,
-                  'status': statusStr.toLowerCase(),
-                  'isCharging': statusStr.toLowerCase() == 'charging',
-                  'lastSynced': data['lastUpdated'] ?? row['updated_at'] ?? DateTime.now().toIso8601String(),
-                  'components': payload,
-                }));
-              } else {
-                devices.add(_deviceFromPayload(deviceUuid, row['device_name'] ?? 'My Device', payload, row['updated_at']));
-              }
-            } catch (e) {
-              print("Error fetching AI metrics for $deviceUuid: $e");
-              devices.add(_deviceFromPayload(deviceUuid, row['device_name'] ?? 'My Device', payload, row['updated_at']));
-            }
-          }());
+          devices.add(_deviceFromPayload(
+            deviceUuid,
+            row['device_name'] ?? 'My Device',
+            payload,
+            row['updated_at'],
+          ));
         }
-
-        await Future.wait(futures);
 
         // Deduplicate by name, keep latest
         final Map<String, Device> uniqueDevices = {};

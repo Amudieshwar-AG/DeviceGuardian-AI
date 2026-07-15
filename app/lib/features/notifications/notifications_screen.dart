@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../core/services/api_service.dart';
+import '../../services/device_service.dart';
 import '../../models/prediction.dart';
 import '../../models/device.dart';
 
@@ -30,13 +31,18 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
 
   Future<void> _loadNotifications() async {
     try {
-      final devices = await _apiService.getDevices();
+      final deviceService = ref.read(deviceServiceProvider);
+      final List<Device> devices = await deviceService.getMyDevices();
       List<Widget> notifs = [];
       
-      for (var device in devices) {
+      for (Device device in devices) {
         try {
-          final pred = await _apiService.getPrediction(device.id);
-          if (pred.riskLevel == 'High Risk') {
+          final Prediction pred = await _apiService.getPrediction(device.id);
+          
+          if (!mounted) return;
+          final risk = pred.riskLevel.toLowerCase();
+          
+          if (risk.contains('high') || risk.contains('critical')) {
              notifs.add(_buildNotificationItem(
                context,
                'Critical Risk Detected',
@@ -45,7 +51,7 @@ class _NotificationsScreenState extends ConsumerState<NotificationsScreen> {
                PhosphorIcons.warning(),
                true
              ));
-          } else if (pred.riskLevel == 'Medium Risk') {
+          } else if (risk.contains('medium') || risk.contains('warning')) {
              notifs.add(_buildNotificationItem(
                context,
                'Wear Detected',

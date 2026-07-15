@@ -361,6 +361,11 @@ document.addEventListener("DOMContentLoaded", () => {
     let devicesCache = {};
     let allDevicesList = [];
     let allowedUuidsCache = [];
+    let activeBackendIdsCache = null;
+    let backendDbDataCache = [];
+    let lastMappingsCheckTime = 0;
+    let lastBackendCheckTime = 0;
+    let lastLocalDetectTime = 0;
 
     function getRandomArbitrary(min, max) {
         return Math.random() * (max - min) + min;
@@ -717,45 +722,57 @@ document.addEventListener("DOMContentLoaded", () => {
             const loggedInEmail = getStorageItem("userEmail") || "";
             if (!loggedInEmail) return;
             
-            let allowedUuids = await fetchUserDeviceMappings(loggedInEmail);
+            // Throttle Supabase mappings checks to once every 30 seconds
+            const now = Date.now();
+            let allowedUuids = allowedUuidsCache.length > 0 ? allowedUuidsCache : null;
+            if (allowedUuids === null || (now - lastMappingsCheckTime > 30000)) {
+                allowedUuids = await fetchUserDeviceMappings(loggedInEmail);
+                allowedUuidsCache = allowedUuids || [];
+                lastMappingsCheckTime = now;
+            }
             
-            // Cross-device sync: fetch active devices from backend to filter out ones deleted from mobile/other sessions
+            // Throttle Render backend sync checks to once every 30 seconds
             let backendDbData = [];
-            try {
-                const backendRes = await fetch("https://deviceguardian-ai.onrender.com/devices", { cache: "no-store" });
-                if (backendRes.ok) {
-                    const rawList = await backendRes.json();
-                    
-                    // Filter allowed UUIDs based on active backend list
-                    const activeBackendIds = rawList.map(d => d.id);
-                    if (allowedUuids) {
-                        allowedUuids = allowedUuids.filter(uuid => activeBackendIds.includes(uuid));
+            let activeBackendIds = activeBackendIdsCache;
+            if (activeBackendIds === null || (now - lastBackendCheckTime > 30000)) {
+                try {
+                    const backendRes = await fetch("https://deviceguardian-ai.onrender.com/devices", { cache: "no-store" });
+                    if (backendRes.ok) {
+                        const rawList = await backendRes.json();
+                        activeBackendIds = rawList.map(d => d.id);
+                        activeBackendIdsCache = activeBackendIds;
+                        lastBackendCheckTime = now;
+                        
+                        // Map backend data to Supabase telemetry format (for mobile phones that fail to write to Supabase)
+                        const mappedData = rawList.map(row => ({
+                            device_uuid: row.id,
+                            device_name: row.name,
+                            payload: {
+                                system: { device_name: row.name },
+                                cpu: { usage_percent: 15.0, temperature_c: 35.0 },
+                                battery: { percentage: row.battery || 100, charging: row.status === "Charging", health: "100%" },
+                                memory: { ram_usage_percent: 50.0, total_ram: 8 * 1024 * 1024 * 1024, used_ram: 4 * 1024 * 1024 * 1024 },
+                                storage: { disk_usage_percent: 45.0, total_space_bytes: 128 * 1024 * 1024 * 1024, free_space_bytes: 70 * 1024 * 1024 * 1024, used_space_bytes: 58 * 1024 * 1024 * 1024 },
+                                disk_health: { smart_status: "OK", errors: 0 },
+                                health_prediction: {
+                                    health: row.healthScore || 100,
+                                    remaining_useful_life_months: 36,
+                                    risk: "Low",
+                                    explanations: ["Metrics approximated from SQLite cache"],
+                                    shap_contributions: {}
+                                }
+                            },
+                            updated_at: row.lastUpdated
+                        }));
+                        backendDbDataCache = mappedData;
                     }
-                    
-                    // Map backend data to Supabase telemetry format (for mobile phones that fail to write to Supabase)
-                    backendDbData = rawList.map(row => ({
-                        device_uuid: row.id,
-                        device_name: row.name,
-                        payload: {
-                            system: { device_name: row.name },
-                            cpu: { usage_percent: 15.0, temperature_c: 35.0 },
-                            battery: { percentage: row.battery || 100, charging: row.status === "Charging", health: "100%" },
-                            memory: { ram_usage_percent: 50.0, total_ram: 8 * 1024 * 1024 * 1024, used_ram: 4 * 1024 * 1024 * 1024 },
-                            storage: { disk_usage_percent: 45.0, total_space_bytes: 128 * 1024 * 1024 * 1024, free_space_bytes: 70 * 1024 * 1024 * 1024, used_space_bytes: 58 * 1024 * 1024 * 1024 },
-                            disk_health: { smart_status: "OK", errors: 0 },
-                            health_prediction: {
-                                health: row.healthScore || 100,
-                                remaining_useful_life_months: 36,
-                                risk: "Low",
-                                explanations: ["Metrics approximated from SQLite cache"],
-                                shap_contributions: {}
-                            }
-                        },
-                        updated_at: row.lastUpdated
-                    }));
+                } catch (err) {
+                    console.error("Backend sync check failed:", err);
                 }
-            } catch (err) {
-                console.error("Backend sync check failed:", err);
+            }
+            
+            if (backendDbDataCache && backendDbDataCache.length > 0) {
+                backendDbData = backendDbDataCache;
             }
             
             // Apply local hidden cache for instant removal
@@ -774,10 +791,10 @@ document.addEventListener("DOMContentLoaded", () => {
             const mergedData = Array.from(mergedMap.values());
             
             allDevicesList = mergedData;
-            allowedUuidsCache = allowedUuids || [];
-
-            // Local agent auto-detection check
-            if (allowedUuids !== null && loggedInEmail) {
+            
+            // Throttle local agent auto-detection queries to once every 15 seconds
+            if (allowedUuids !== null && loggedInEmail && (now - lastLocalDetectTime > 15000)) {
+                lastLocalDetectTime = now;
                 try {
                     const localRes = await fetch("http://127.0.0.1:31415/device_uuid");
                     if (localRes.ok) {
@@ -940,7 +957,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Poll backend every 3 seconds
+    // Poll backend every 10 seconds to avoid request congestion
     fetchDevices();
-    setInterval(fetchDevices, 3000);
+    setInterval(fetchDevices, 10000);
 });

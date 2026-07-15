@@ -12,6 +12,11 @@ import io.flutter.plugin.common.MethodChannel
 import android.app.AppOpsManager
 import android.provider.Settings
 import android.os.Process
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import java.util.Random
 
 class MainActivity : FlutterActivity() {
     private val CHANNEL = "com.example.device_guardian_app/battery"
@@ -132,6 +137,39 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     } catch (e: Exception) {
                         result.error("ERROR", e.message, null)
+                    }
+                }
+                "showNotification" -> {
+                    val title = call.argument<String>("title") ?: "Alert"
+                    val body = call.argument<String>("body") ?: ""
+                    
+                    try {
+                        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                        val channelId = "device_guardian_alerts"
+                        
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            val channel = NotificationChannel(
+                                channelId,
+                                "DeviceGuardian Alerts",
+                                NotificationManager.IMPORTANCE_HIGH
+                            ).apply {
+                                description = "Critical alerts and wear anomalies"
+                            }
+                            notificationManager.createNotificationChannel(channel)
+                        }
+                        
+                        val builder = NotificationCompat.Builder(context, channelId)
+                            .setSmallIcon(android.R.drawable.ic_dialog_info)
+                            .setContentTitle(title)
+                            .setContentText(body)
+                            .setPriority(NotificationCompat.PRIORITY_HIGH)
+                            .setAutoCancel(true)
+                        
+                        notificationManager.notify(Random().nextInt(10000), builder.build())
+                        result.success(true)
+                    } catch (e: Exception) {
+                        android.util.Log.e("DeviceGuardian", "Notification failed", e)
+                        result.error("NOTIFICATION_ERROR", e.message, e.stackTraceToString())
                     }
                 }
                 else -> {
