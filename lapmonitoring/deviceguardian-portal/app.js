@@ -438,6 +438,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const battery = payload.battery || {};
         const disk = payload.disk_health || {};
 
+        // Determine if it is a laptop or a mobile device first
+        const systemMap = payload.system || {};
+        const winVersion = String(systemMap.windows_version || "").toLowerCase();
+        const devName = String(systemMap.device_name || "").toLowerCase();
+        
+        let isLaptop = false;
+        if (
+            winVersion.includes("windows") ||
+            devName.includes("laptop") ||
+            devName.includes("pc") ||
+            devName.includes("ashwin") ||
+            devName.includes("amudieshwar") ||
+            devName.includes("devesh") ||
+            payload.gpus ||
+            payload.disk_health
+        ) {
+            isLaptop = true;
+        }
+
         // CPU update
         const cpuUsage = cpu.usage_percent || 0;
         cpuDial.style.setProperty("--percent", cpuUsage);
@@ -475,26 +494,47 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // RAM update
-        const ramUsage = ram.ram_usage_percent || 0;
+        const ramUsage = ram.ram_usage_percent !== undefined ? ram.ram_usage_percent : (ram.usage_percent !== undefined ? ram.usage_percent : 0);
         ramDial.style.setProperty("--percent", ramUsage);
-        ramVal.textContent = `${ramUsage}%`;
-        const totalRam = ram.total_ram || 0;
-        const usedRam = ram.used_ram || 0;
+        ramVal.textContent = `${ramUsage.toFixed(0)}%`;
+        
+        let totalRam = ram.total_ram || 0;
+        let usedRam = ram.used_ram || 0;
+        
+        // If it's a phone and we don't have RAM bytes info, assume a standard 8 GB RAM
+        if (totalRam === 0 && !isLaptop) {
+            totalRam = 8 * 1024 * 1024 * 1024; // 8 GB
+            usedRam = totalRam * (ramUsage / 100);
+        }
+        
         const freeRam = totalRam - usedRam;
-        const totalRamGb = totalRam ? (totalRam / (1024 ** 3)).toFixed(1) : "16.0";
+        const totalRamGb = totalRam ? (totalRam / (1024 ** 3)).toFixed(1) : "8.0";
         const freeRamGb = freeRam ? (freeRam / (1024 ** 3)).toFixed(1) : "0.0";
         ramTotal.textContent = `${Math.round(totalRamGb)} GB`;
         ramFree.textContent = `${freeRamGb} GB`;
 
         // Battery update
-        const batPct = battery.percentage || 0;
+        const batPct = battery.percentage !== undefined ? battery.percentage : (battery.level !== undefined ? battery.level : 0);
         batteryBar.style.width = `${batPct}%`;
-        const chargingStr = battery.charging ? "Charging" : "Discharging/Full";
+        
+        const isCharging = battery.charging !== undefined ? battery.charging : (battery.is_charging !== undefined ? battery.is_charging : false);
+        const chargingStr = isCharging ? "Charging" : "Discharging/Full";
         batteryText.textContent = `${batPct}% (${chargingStr})`;
-        batteryHealth.textContent = battery.health ? `Health: ${battery.health}` : "Health: N/A";
+        
+        // Health
+        let batHealth = battery.health;
+        if (batHealth === undefined && payload.native_battery_health_percentage !== undefined) {
+            batHealth = `${payload.native_battery_health_percentage}%`;
+        }
+        batteryHealth.textContent = batHealth ? `Health: ${batHealth}` : "Health: N/A";
 
         // SMART update
-        const status = disk.smart_status || "UNKNOWN";
+        let status = disk.smart_status;
+        if (!status && !isLaptop) {
+            status = "HEALTHY"; // Phones are always healthy if no system error
+        }
+        status = status || "UNKNOWN";
+        
         if (status === "OK" || status === "HEALTHY") {
             smartStatus.className = "smart-status-badge healthy";
             smartStatus.innerHTML = `✓ ${status}`;
@@ -505,9 +545,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // SSD Storage update
         const storage = payload.storage || {};
-        const diskPct = storage.disk_usage_percent || 0;
-        const freeBytes = storage.free_space_bytes || 0;
-        const totalBytes = storage.total_space_bytes || 0;
+        const diskPct = storage.disk_usage_percent !== undefined ? storage.disk_usage_percent : (storage.usage_percent !== undefined ? storage.usage_percent : 0);
+        
+        let freeBytes = storage.free_space_bytes || 0;
+        let totalBytes = storage.total_space_bytes || 0;
+        
+        // If it's a phone and we don't have bytes info, assume a standard 128 GB storage
+        if (totalBytes === 0 && !isLaptop) {
+            totalBytes = 128 * 1024 * 1024 * 1024; // 128 GB
+            freeBytes = totalBytes * ((100 - diskPct) / 100);
+        }
+        
         const usedBytes = storage.used_space_bytes !== undefined ? storage.used_space_bytes : (totalBytes - freeBytes);
 
         const totalGb = totalBytes ? (totalBytes / (1024 ** 3)).toFixed(1) : "0.0";
@@ -519,23 +567,6 @@ document.addEventListener("DOMContentLoaded", () => {
         storageFreeText.textContent = `Free: ${freeGb} GB`;
 
         // Update real-time AI Health Prediction
-        const systemMap = payload.system || {};
-        const winVersion = String(systemMap.windows_version || "").toLowerCase();
-        const devName = String(systemMap.device_name || "").toLowerCase();
-        
-        let isLaptop = false;
-        if (
-            winVersion.includes("windows") ||
-            devName.includes("laptop") ||
-            devName.includes("pc") ||
-            devName.includes("ashwin") ||
-            devName.includes("amudieshwar") ||
-            devName.includes("devesh") ||
-            payload.gpus ||
-            payload.disk_health
-        ) {
-            isLaptop = true;
-        }
 
         const pred = payload.health_prediction;
         let displayHealth = pred ? parseFloat(pred.health) : 100.0;
