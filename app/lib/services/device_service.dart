@@ -9,7 +9,7 @@ import '../core/constants/api_constants.dart';
 
 class DeviceService {
   /// Build a Device from a raw telemetry payload map
-  Device _deviceFromPayload(String uuid, String deviceName, Map<String, dynamic> payload, String? updatedAt) {
+  Device _deviceFromPayload(String uuid, String deviceName, Map<String, dynamic> payload, String? updatedAt, {int? overrideHealth}) {
     final systemMap = payload['system'] is Map ? Map<String, dynamic>.from(payload['system']) : {};
     
     // Parse battery level from payload
@@ -64,13 +64,17 @@ class DeviceService {
       }
       healthScore = (baseHealth - deductions).round().clamp(0, 100);
     } else {
-      final aiHealth = healthPred['health'];
-      if (aiHealth != null) {
-        healthScore = (aiHealth as num).round();
+      if (overrideHealth != null) {
+        healthScore = overrideHealth;
       } else {
-        healthScore = (80 + 20 * (rul / 36.0)).round();
-        if (nativeHealth != null) {
-          healthScore = (nativeHealth as num).toInt();
+        final aiHealth = healthPred['health'];
+        if (aiHealth != null) {
+          healthScore = (aiHealth as num).round();
+        } else {
+          healthScore = (80 + 20 * (rul / 36.0)).round();
+          if (nativeHealth != null) {
+            healthScore = (nativeHealth as num).toInt();
+          }
         }
       }
     }
@@ -100,6 +104,23 @@ class DeviceService {
   }
 
   Future<List<Device>> getMyDevices() async {
+    // Fetch live device list from Render backend first to get true history-based prediction scores
+    final Map<String, Map<String, dynamic>> renderDevicesMap = {};
+    try {
+      final res = await http.get(Uri.parse('${ApiConstants.baseUrl}/devices'))
+          .timeout(const Duration(seconds: 4));
+      if (res.statusCode == 200) {
+        final List<dynamic> rawList = jsonDecode(res.body);
+        for (var d in rawList) {
+          if (d is Map && d['id'] != null) {
+            renderDevicesMap[d['id'].toString()] = Map<String, dynamic>.from(d);
+          }
+        }
+      }
+    } catch (e) {
+      print("Render devices query failed: $e");
+    }
+
     // ── Try Supabase (online mode) ────────────────────────────────────────
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -138,11 +159,14 @@ class DeviceService {
             payload = Map<String, dynamic>.from(row['payload']);
           }
 
+          final overrideHealth = renderDevicesMap[deviceUuid]?['healthScore'] as int?;
+
           devices.add(_deviceFromPayload(
             deviceUuid,
             row['device_name'] ?? 'My Device',
             payload,
             row['updated_at'],
+            overrideHealth: overrideHealth,
           ));
         }
 
@@ -190,7 +214,14 @@ class DeviceService {
           'storage': {'usage_percent': data['ssd'] ?? 40.0},
           'system': {'device_name': data['name'] ?? 'My Device'},
         };
-        return [_deviceFromPayload(localUuid, data['name'] ?? 'My Device', payload, data['lastUpdated'])];
+        final overrideHealth = data['healthScore'] ?? data['health'];
+        return [_deviceFromPayload(
+          localUuid,
+          data['name'] ?? 'My Device',
+          payload,
+          data['lastUpdated'],
+          overrideHealth: overrideHealth != null ? (overrideHealth as num).toInt() : null,
+        )];
       }
 
       // If no telemetry yet, return a placeholder so the home screen isn't blank
