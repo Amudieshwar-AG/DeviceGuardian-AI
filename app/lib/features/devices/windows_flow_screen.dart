@@ -115,7 +115,7 @@ class _WindowsFlowScreenState extends State<WindowsFlowScreen> {
             children: [
               Icon(PhosphorIcons.link(), size: 48, color: AppTheme.primaryColor),
               const SizedBox(height: 16),
-              Text('https://lapmonitoring.vercel.app/', 
+              Text('https://device-guardian-ai.vercel.app/', 
                   style: Theme.of(context).textTheme.titleLarge,
                   textAlign: TextAlign.center),
               const SizedBox(height: 24),
@@ -124,7 +124,7 @@ class _WindowsFlowScreenState extends State<WindowsFlowScreen> {
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: () {
-                        Clipboard.setData(const ClipboardData(text: 'https://lapmonitoring.vercel.app/'));
+                        Clipboard.setData(const ClipboardData(text: 'https://device-guardian-ai.vercel.app/'));
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Link copied to clipboard')),
                         );
@@ -137,7 +137,7 @@ class _WindowsFlowScreenState extends State<WindowsFlowScreen> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () {
-                        launchUrl(Uri.parse('https://lapmonitoring.vercel.app/'));
+                        launchUrl(Uri.parse('https://device-guardian-ai.vercel.app/'));
                         _nextStep();
                       },
                       child: const Text('Open'),
