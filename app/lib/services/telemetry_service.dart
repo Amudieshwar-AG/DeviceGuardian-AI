@@ -10,7 +10,7 @@ import '../core/services/api_service.dart';
 import 'package:flutter/services.dart';
 import 'dart:math';
 
-const batteryChannel = MethodChannel('com.example.device_guardian_app/battery');
+const batteryChannel = MethodChannel('com.deviceguardian.ai/battery');
 
 /// Reads real battery temperature from Android native API or sysfs.
 Future<double> getRealBatteryTemperature() async {

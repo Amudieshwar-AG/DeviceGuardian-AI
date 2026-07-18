@@ -1,4 +1,4 @@
-package com.example.device_guardian_app
+package com.deviceguardian.ai
 
 import android.content.Context
 import android.content.Intent
@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 import java.util.Random
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.device_guardian_app/battery"
+    private val CHANNEL = "com.deviceguardian.ai/battery"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

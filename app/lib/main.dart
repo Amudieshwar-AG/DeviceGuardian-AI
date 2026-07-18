@@ -13,9 +13,21 @@ import 'models/device.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Keys are injected at build time via --dart-define for release builds.
+  // Fallback values are used for local development.
+  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const supabaseKey = String.fromEnvironment('SUPABASE_KEY');
+
+  if (supabaseUrl.isEmpty || supabaseKey.isEmpty) {
+    throw FlutterError(
+      'Supabase URL and Key must be provided via --dart-define-from-file=.env\n'
+      'Run the project using: flutter run --dart-define-from-file=.env'
+    );
+  }
+
   await Supabase.initialize(
-    url: 'https://lonsqhuudhiffjitmcbh.supabase.co',
-    anonKey: 'sb_publishable_huLEhuc-J4bal6hQRkPf5w_O16MKv6V',
+    url: supabaseUrl,
+    publishableKey: supabaseKey,
   );
 
   runApp(
@@ -41,13 +53,13 @@ class _DeviceGuardianAppState extends ConsumerState<DeviceGuardianApp> {
       final supabaseUser = Supabase.instance.client.auth.currentUser;
       if (supabaseUser != null) {
         // Online mode: full Supabase session
-        ref.read(telemetryServiceProvider).start(intervalSeconds: 30);
+        ref.read(telemetryServiceProvider).start(intervalSeconds: 20);
       } else {
         // Offline mode: check if we have a locally saved device UUID
         final prefs = await SharedPreferences.getInstance();
         final localUuid = prefs.getString('official_device_uuid');
         if (localUuid != null) {
-          ref.read(telemetryServiceProvider).start(intervalSeconds: 30);
+          ref.read(telemetryServiceProvider).start(intervalSeconds: 20);
         }
       }
     });

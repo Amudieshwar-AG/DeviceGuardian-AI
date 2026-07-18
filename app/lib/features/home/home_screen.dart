@@ -21,7 +21,7 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Ensure background telemetry is started immediately on home screen load
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      ref.read(telemetryServiceProvider).start(intervalSeconds: 30);
+      ref.read(telemetryServiceProvider).start(intervalSeconds: 20);
       
       // Auto-request notifications permission on Android 13+ so system-level alerts work immediately
       if (Platform.isAndroid) {

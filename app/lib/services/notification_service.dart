@@ -4,7 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/device.dart';
 
 class AppNotificationService {
-  static const _channel = MethodChannel('com.example.device_guardian_app/battery');
+  static const _channel = MethodChannel('com.deviceguardian.ai/battery');
   
   // Track notified device statuses in memory to avoid spamming the same status repeatedly
   final Set<String> _notifiedDeviceStatuses = {};

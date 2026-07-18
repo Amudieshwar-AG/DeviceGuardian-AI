@@ -1,10 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
     // Wake up and keep Render backend service alive while the portal is open
+    // Fire every 25s to prevent Render free-tier cold starts (which cause 60-90s delay)
     const wakeBackend = () => {
         fetch("https://lapmonitoring.onrender.com/health").catch(() => {});
     };
     wakeBackend();
-    setInterval(wakeBackend, 60000); // Ping every 60 seconds
+    setInterval(wakeBackend, 25000); // Ping every 25 seconds to keep Render warm
 
     // Initialize Lucide Icons
     if (window.lucide) {
@@ -707,6 +708,7 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         try {
+            const now = Date.now();
             const supabase_key = "sb_publishable_huLEhuc-J4bal6hQRkPf5w_O16MKv6V";
             const res = await fetch(BACKEND_URL, {
                 method: "GET",
@@ -722,20 +724,15 @@ document.addEventListener("DOMContentLoaded", () => {
             const loggedInEmail = getStorageItem("userEmail") || "";
             if (!loggedInEmail) return;
             
-            // Throttle Supabase mappings checks to once every 30 seconds
-            const now = Date.now();
-            let allowedUuids = allowedUuidsCache.length > 0 ? allowedUuidsCache : null;
-            if (allowedUuids === null || (now - lastMappingsCheckTime > 30000)) {
-                allowedUuids = await fetchUserDeviceMappings(loggedInEmail);
-                allowedUuidsCache = allowedUuids || [];
-                lastMappingsCheckTime = now;
-            }
+            // Refresh user-device mappings on every fetch (fetch is throttled to 30s at caller level)
+            let allowedUuids = await fetchUserDeviceMappings(loggedInEmail);
+            allowedUuidsCache = allowedUuids || [];
+            lastMappingsCheckTime = now;
             
-            // Throttle Render backend sync checks to once every 30 seconds
+            // Refresh Render backend data on every fetch (already throttled to 30s at caller level)
             let backendDbData = [];
-            let activeBackendIds = activeBackendIdsCache;
-            if (activeBackendIds === null || (now - lastBackendCheckTime > 30000)) {
-                try {
+            let activeBackendIds = [];
+            try {
                     const backendRes = await fetch("https://deviceguardian-ai.onrender.com/devices", { cache: "no-store" });
                     if (backendRes.ok) {
                         const rawList = await backendRes.json();
@@ -769,7 +766,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 } catch (err) {
                     console.error("Backend sync check failed:", err);
                 }
-            }
             
             if (backendDbDataCache && backendDbDataCache.length > 0) {
                 backendDbData = backendDbDataCache;
@@ -957,7 +953,50 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Poll backend every 10 seconds to avoid request congestion
-    fetchDevices();
-    setInterval(fetchDevices, 10000);
+    // ── Live refresh counter ──────────────────────────────────────────────────
+    // Shows the user exactly when data last updated and how long until next sync
+    let lastRefreshTime = Date.now();
+    const REFRESH_INTERVAL_MS = 30000; // 30 seconds
+
+    // Inject a small status bar under the header if not already present
+    function injectRefreshStatus() {
+        if (document.getElementById('refresh-status-bar')) return;
+        const bar = document.createElement('div');
+        bar.id = 'refresh-status-bar';
+        bar.style.cssText = [
+            'position:fixed', 'bottom:12px', 'right:16px', 'z-index:9999',
+            'background:rgba(30,30,40,0.85)', 'color:#aaa', 'font-size:11px',
+            'padding:4px 10px', 'border-radius:20px',
+            'backdrop-filter:blur(6px)', 'pointer-events:none',
+            'border:1px solid rgba(255,255,255,0.08)',
+            'transition:opacity 0.3s'
+        ].join(';');
+        document.body.appendChild(bar);
+    }
+
+    function updateRefreshStatus() {
+        const bar = document.getElementById('refresh-status-bar');
+        if (!bar) return;
+        const secondsAgo = Math.floor((Date.now() - lastRefreshTime) / 1000);
+        const nextIn = Math.max(0, Math.ceil((REFRESH_INTERVAL_MS - (Date.now() - lastRefreshTime)) / 1000));
+        const dot = nextIn <= 5 ? '🟢' : '🔵';
+        bar.textContent = `${dot} Updated ${secondsAgo}s ago · Next in ${nextIn}s`;
+    }
+
+    injectRefreshStatus();
+    // Update the counter every second
+    setInterval(updateRefreshStatus, 1000);
+
+    // Wrapped fetchDevices that also resets the lastRefreshTime counter
+    const _originalFetchDevices = fetchDevices;
+    async function fetchDevicesWithTimer() {
+        await fetchDevices();
+        lastRefreshTime = Date.now();
+        updateRefreshStatus();
+    }
+
+    // Initial fetch + poll every 30 seconds
+    // (Agent uploads every ~20-30s, so polling more often than 30s is wasteful)
+    fetchDevicesWithTimer();
+    setInterval(fetchDevicesWithTimer, REFRESH_INTERVAL_MS);
 });

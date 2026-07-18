@@ -35,6 +35,9 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> with WidgetsBindi
   final ApiService _apiService = ApiService();
   bool _isRegistering = false;
 
+  // Only Battery and Notifications are REQUIRED to register.
+  // Storage and Usage Stats improve accuracy but can be skipped.
+  bool get _requiredGranted => _permissions['Battery']! && _permissions['Notifications']!;
   bool get _allGranted => _permissions.values.every((v) => v);
 
   @override
@@ -78,7 +81,7 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> with WidgetsBindi
     // 4. Check Usage Stats via Native Channel
     bool usageStatsGranted = false;
     try {
-      usageStatsGranted = await const MethodChannel('com.example.device_guardian_app/battery')
+      usageStatsGranted = await const MethodChannel('com.deviceguardian.ai/battery')
           .invokeMethod('checkUsageStatsPermission');
     } catch (e) {
       debugPrint("Error checking usage stats permission: $e");
@@ -115,7 +118,7 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> with WidgetsBindi
       granted = true; // OEM OS fallback: ensure switch is toggled green once attempted
     } else if (key == 'Usage Stats') {
       try {
-        await const MethodChannel('com.example.device_guardian_app/battery')
+        await const MethodChannel('com.deviceguardian.ai/battery')
             .invokeMethod('requestUsageStatsPermission');
         // Let lifecycle observer check again on app resume
         return;
@@ -204,7 +207,7 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> with WidgetsBindi
         );
         // Start background telemetry sync
         final container = ProviderScope.containerOf(context);
-        container.read(telemetryServiceProvider).start(intervalSeconds: 30);
+        container.read(telemetryServiceProvider).start(intervalSeconds: 20);
         container.invalidate(myDevicesProvider);
         context.go('/home');
       } else if (mounted) {
@@ -248,6 +251,11 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> with WidgetsBindi
               'DeviceGuardian needs these permissions to monitor your phone\'s health effectively.',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: AppTheme.textSecondary),
             ),
+            const SizedBox(height: 4),
+            Text(
+              '⭐ Battery & Notifications are required. Storage & Usage Stats are optional but improve accuracy.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.primaryColor.withOpacity(0.8)),
+            ),
             const SizedBox(height: 32),
             
             Expanded(
@@ -264,18 +272,29 @@ class _AndroidFlowScreenState extends State<AndroidFlowScreen> with WidgetsBindi
               ),
             ),
             
+            // Already Registered button - for returning users
+            TextButton(
+              onPressed: () {
+                context.go('/home');
+              },
+              child: Text(
+                'Already registered? View Dashboard →',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+              ),
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
-                onPressed: (_allGranted && !_isRegistering) ? _registerDevice : null,
+                onPressed: (_requiredGranted && !_isRegistering) ? _registerDevice : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _allGranted ? AppTheme.primaryColor : Theme.of(context).cardColor,
+                  backgroundColor: _requiredGranted ? AppTheme.primaryColor : Theme.of(context).cardColor,
                 ),
                 child: _isRegistering 
                     ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Register Device'),
+                    : Text(_allGranted ? 'Register Device (Full Access)' : 'Register Device'),
               ),
-            ).animate(target: _allGranted ? 1 : 0).shimmer(duration: 1.seconds),
+            ).animate(target: _requiredGranted ? 1 : 0).shimmer(duration: 1.seconds),
           ],
         ),
       ),
